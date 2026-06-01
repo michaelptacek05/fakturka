@@ -1,23 +1,45 @@
 "use server";
 
+import fs from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { InvoiceStatus, VatPayerStatus } from "@/generated/prisma/enums";
+import {
+  InvoiceStatus,
+  VatPayerStatus,
+} from "@/generated/prisma/enums";
 import {
   addDays,
   decimalFromCents,
-  getOptionalString,
-  getRequiredString,
-  parseMoneyToCents,
-  parseQuantity,
   toDate,
 } from "@/lib/format";
+import {
+  getInvoiceAssetExtension,
+  getInvoiceAssetStorageRoot,
+  INVOICE_ASSET_MIME_TYPES,
+  isAllowedInvoiceAssetType,
+  MAX_INVOICE_ASSET_SIZE,
+  removeStoredInvoiceAsset,
+} from "@/lib/invoice-assets";
 import { prisma } from "@/lib/prisma";
-
-function normalizeDigits(value: string | null) {
-  return value?.replace(/\D/g, "") || null;
-}
+import {
+  getOptionalFormString,
+  getRequiredFormString,
+  getValidationErrorParam,
+  normalizeAccountNumber,
+  normalizeBankCode,
+  normalizeDic,
+  normalizeEmail,
+  normalizeIban,
+  normalizeIco,
+  normalizeMoneyToCents,
+  normalizeQuantity,
+  normalizeVatRate,
+  ValidationError,
+} from "@/lib/validation";
 
 function buildInvoiceNumber(issueDate: Date, nextNumber: number) {
   const year = issueDate.getFullYear();
@@ -28,33 +50,33 @@ function buildInvoiceNumber(issueDate: Date, nextNumber: number) {
 }
 
 function buildClientData(formData: FormData) {
-  const clientName = getRequiredString(formData, "clientName");
+  const clientName = getRequiredFormString(formData, "clientName");
 
   return {
-    city: getRequiredString(formData, "clientCity"),
+    city: getRequiredFormString(formData, "clientCity"),
     companyName: clientName,
-    country: getOptionalString(formData, "clientCountry") ?? "Česká republika",
-    dic: getOptionalString(formData, "clientDic"),
-    email: getOptionalString(formData, "clientEmail"),
+    country: getOptionalFormString(formData, "clientCountry") ?? "Česká republika",
+    dic: normalizeDic(getOptionalFormString(formData, "clientDic")),
+    email: normalizeEmail(getOptionalFormString(formData, "clientEmail")),
     fullName: null,
-    ico: normalizeDigits(getOptionalString(formData, "clientIco")),
-    phone: getOptionalString(formData, "clientPhone"),
-    postalCode: getRequiredString(formData, "clientPostalCode"),
-    street: getRequiredString(formData, "clientStreet"),
+    ico: normalizeIco(getOptionalFormString(formData, "clientIco")),
+    phone: getOptionalFormString(formData, "clientPhone"),
+    postalCode: getRequiredFormString(formData, "clientPostalCode"),
+    street: getRequiredFormString(formData, "clientStreet"),
   };
 }
 
 function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
   const issueDate = toDate(
-    getOptionalString(formData, "issueDate"),
+    getOptionalFormString(formData, "issueDate"),
     new Date(),
   );
   const dueDate = toDate(
-    getOptionalString(formData, "dueDate"),
+    getOptionalFormString(formData, "dueDate"),
     addDays(issueDate, 14),
   );
   const taxableSupplyDate = toDate(
-    getOptionalString(formData, "taxableSupplyDate"),
+    getOptionalFormString(formData, "taxableSupplyDate"),
     issueDate,
   );
 
@@ -67,20 +89,26 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
   const items = itemNames
     .map((value, index) => {
       const name = typeof value === "string" ? value.trim() : "";
-      const quantity = parseQuantity(quantities[index] ?? null);
-      const unitPriceCents = parseMoneyToCents(unitPrices[index] ?? null);
-      const vatRate = isVatPayer
-        ? parseQuantity(vatRates[index] ?? null)
-        : 0;
+      const rawQuantity = quantities[index];
+      const rawUnitPrice = unitPrices[index];
+      const hasQuantity =
+        typeof rawQuantity === "string" && rawQuantity.trim().length > 0;
+      const hasUnitPrice =
+        typeof rawUnitPrice === "string" && rawUnitPrice.trim().length > 0;
 
-      if (!name && quantity === 0 && unitPriceCents === 0) {
+      if (!name && !hasQuantity && !hasUnitPrice) {
         return null;
       }
 
-      if (!name || quantity <= 0 || unitPriceCents < 0) {
-        throw new Error("Invalid invoice item.");
+      if (!name) {
+        throw new ValidationError("item", "Položka faktury musí mít název.");
       }
 
+      const quantity = normalizeQuantity(rawQuantity ?? null);
+      const unitPriceCents = normalizeMoneyToCents(rawUnitPrice ?? null);
+      const vatRate = isVatPayer
+        ? normalizeVatRate(vatRates[index] ?? null)
+        : 0;
       const lineSubtotalCents = Math.round(quantity * unitPriceCents);
       const lineVatCents = Math.round(lineSubtotalCents * (vatRate / 100));
       const lineTotalCents = lineSubtotalCents + lineVatCents;
@@ -113,7 +141,7 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
     } => item !== null);
 
   if (items.length === 0) {
-    throw new Error("Missing invoice items.");
+    throw new ValidationError("item", "Faktura musí mít alespoň jednu položku.");
   }
 
   const subtotalCents = items.reduce(
@@ -148,13 +176,18 @@ export async function upsertProfile(formData: FormData) {
   let data;
 
   try {
-    const displayName = getRequiredString(formData, "displayName");
-    const street = getRequiredString(formData, "street");
-    const city = getRequiredString(formData, "city");
-    const postalCode = getRequiredString(formData, "postalCode");
-    const ico = normalizeDigits(getRequiredString(formData, "ico")) ?? "";
-    const accountNumber = getRequiredString(formData, "accountNumber");
-    const bankCode = getRequiredString(formData, "bankCode");
+    const displayName = getRequiredFormString(formData, "displayName");
+    const street = getRequiredFormString(formData, "street");
+    const city = getRequiredFormString(formData, "city");
+    const postalCode = getRequiredFormString(formData, "postalCode");
+    const ico = normalizeIco(getRequiredFormString(formData, "ico"), true) ?? "";
+    const bankCode = normalizeBankCode(
+      getRequiredFormString(formData, "bankCode", "bank"),
+    );
+    const accountNumber = normalizeAccountNumber(
+      getRequiredFormString(formData, "accountNumber", "account"),
+      bankCode,
+    );
     const vatPayerStatus =
       formData.get("vatPayerStatus") === VatPayerStatus.PAYER
         ? VatPayerStatus.PAYER
@@ -164,20 +197,20 @@ export async function upsertProfile(formData: FormData) {
       accountNumber,
       bankCode,
       city,
-      companyName: getOptionalString(formData, "companyName"),
-      country: getOptionalString(formData, "country") ?? "Česká republika",
-      dic: getOptionalString(formData, "dic"),
+      companyName: getOptionalFormString(formData, "companyName"),
+      country: getOptionalFormString(formData, "country") ?? "Česká republika",
+      dic: normalizeDic(getOptionalFormString(formData, "dic")),
       displayName,
-      iban: getOptionalString(formData, "iban"),
+      iban: normalizeIban(getOptionalFormString(formData, "iban")),
       ico,
       postalCode,
-      registryText: getOptionalString(formData, "registryText"),
+      registryText: getOptionalFormString(formData, "registryText"),
       street,
-      swift: getOptionalString(formData, "swift"),
+      swift: getOptionalFormString(formData, "swift"),
       vatPayerStatus,
     };
-  } catch {
-    redirect("/settings/profile?error=validation");
+  } catch (error) {
+    redirect(`/settings/profile?error=${getValidationErrorParam(error)}`);
   }
 
   try {
@@ -226,8 +259,8 @@ export async function createInvoice(formData: FormData) {
       formData,
       profile.vatPayerStatus === VatPayerStatus.PAYER,
     );
-  } catch {
-    redirect("/invoices/new?error=validation");
+  } catch (error) {
+    redirect(`/invoices/new?error=${getValidationErrorParam(error)}`);
   }
 
   let invoiceId;
@@ -280,7 +313,7 @@ export async function createInvoice(formData: FormData) {
       const invoice = await tx.invoice.create({
         data: {
           clientId: savedClient.id,
-          constantSymbol: getOptionalString(formData, "constantSymbol"),
+          constantSymbol: getOptionalFormString(formData, "constantSymbol"),
           currency: "CZK",
           dueDate: invoiceData.dueDate,
           issueDate: invoiceData.issueDate,
@@ -297,11 +330,11 @@ export async function createInvoice(formData: FormData) {
               vatRate: item.vatRate.toFixed(2),
             })),
           },
-          notes: getOptionalString(formData, "notes"),
+          notes: getOptionalFormString(formData, "notes"),
           number,
           profileId: profile.id,
           sequenceId: savedSequence.id,
-          specificSymbol: getOptionalString(formData, "specificSymbol"),
+          specificSymbol: getOptionalFormString(formData, "specificSymbol"),
           status: InvoiceStatus.ISSUED,
           subtotal: decimalFromCents(invoiceData.subtotalCents),
           taxableSupplyDate: invoiceData.taxableSupplyDate,
@@ -365,8 +398,8 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
       formData,
       profile.vatPayerStatus === VatPayerStatus.PAYER,
     );
-  } catch {
-    redirect(`/invoices/${invoiceId}/edit?error=validation`);
+  } catch (error) {
+    redirect(`/invoices/${invoiceId}/edit?error=${getValidationErrorParam(error)}`);
   }
 
   try {
@@ -382,7 +415,7 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
 
       await tx.invoice.update({
         data: {
-          constantSymbol: getOptionalString(formData, "constantSymbol"),
+          constantSymbol: getOptionalFormString(formData, "constantSymbol"),
           dueDate: invoiceData.dueDate,
           issueDate: invoiceData.issueDate,
           items: {
@@ -398,8 +431,8 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
               vatRate: item.vatRate.toFixed(2),
             })),
           },
-          notes: getOptionalString(formData, "notes"),
-          specificSymbol: getOptionalString(formData, "specificSymbol"),
+          notes: getOptionalFormString(formData, "notes"),
+          specificSymbol: getOptionalFormString(formData, "specificSymbol"),
           subtotal: decimalFromCents(invoiceData.subtotalCents),
           taxableSupplyDate: invoiceData.taxableSupplyDate,
           total: decimalFromCents(invoiceData.totalCents),
@@ -480,6 +513,30 @@ export async function cancelInvoice(invoiceId: string) {
   redirect(`/invoices/${invoiceId}?cancelled=1`);
 }
 
+export async function deleteInvoices(formData: FormData) {
+  const invoiceIds = formData
+    .getAll("invoiceId")
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  if (invoiceIds.length === 0) {
+    redirect("/invoices?bulkError=empty");
+  }
+
+  try {
+    const result = await prisma.invoice.deleteMany({
+      where: {
+        id: { in: invoiceIds },
+      },
+    });
+
+    revalidatePath("/");
+    revalidatePath("/invoices");
+    redirect(`/invoices?deleted=${result.count}`);
+  } catch {
+    redirect("/invoices?bulkError=db");
+  }
+}
+
 export async function createClient(formData: FormData) {
   let profile;
 
@@ -500,8 +557,8 @@ export async function createClient(formData: FormData) {
 
   try {
     data = buildClientData(formData);
-  } catch {
-    redirect("/clients/new?error=validation");
+  } catch (error) {
+    redirect(`/clients/new?error=${getValidationErrorParam(error)}`);
   }
 
   let clientId;
@@ -544,8 +601,8 @@ export async function updateClient(clientId: string, formData: FormData) {
 
   try {
     data = buildClientData(formData);
-  } catch {
-    redirect(`/clients/${clientId}?error=validation`);
+  } catch (error) {
+    redirect(`/clients/${clientId}?error=${getValidationErrorParam(error)}`);
   }
 
   try {
@@ -573,4 +630,121 @@ export async function deleteClient(clientId: string) {
 
   revalidatePath("/clients");
   redirect("/clients?deleted=1");
+}
+
+export async function uploadInvoiceAsset(formData: FormData) {
+  const assetType = formData.get("assetType");
+  const file = formData.get("assetFile");
+
+  if (!isAllowedInvoiceAssetType(assetType)) {
+    redirect("/settings/profile?assetError=validation");
+  }
+
+  if (!(file instanceof File) || file.size === 0) {
+    redirect("/settings/profile?assetError=missing");
+  }
+
+  if (!INVOICE_ASSET_MIME_TYPES.includes(file.type)) {
+    redirect("/settings/profile?assetError=type");
+  }
+
+  if (file.size > MAX_INVOICE_ASSET_SIZE) {
+    redirect("/settings/profile?assetError=size");
+  }
+
+  let profile;
+
+  try {
+    profile = await prisma.userProfile.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+  } catch {
+    redirect("/settings/profile?assetError=db");
+  }
+
+  if (!profile) {
+    redirect("/settings/profile?missingProfile=1");
+  }
+
+  const extension = getInvoiceAssetExtension(file.type);
+  const directory = path.join(getInvoiceAssetStorageRoot(), profile.id);
+  const fileName = `${assetType.toLowerCase()}-${randomUUID()}.${extension}`;
+  const storagePath = path.join("storage", "invoice-assets", profile.id, fileName);
+  const absolutePath = path.join(process.cwd(), storagePath);
+  const oldStoragePaths: string[] = [];
+
+  try {
+    await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));
+
+    await prisma.$transaction(async (tx) => {
+      const oldAssets = await tx.invoiceAsset.findMany({
+        select: { storagePath: true },
+        where: {
+          profileId: profile.id,
+          type: assetType,
+        },
+      });
+
+      oldStoragePaths.push(...oldAssets.map((asset) => asset.storagePath));
+
+      await tx.invoiceAsset.deleteMany({
+        where: {
+          profileId: profile.id,
+          type: assetType,
+        },
+      });
+
+      await tx.invoiceAsset.create({
+        data: {
+          fileName: file.name || fileName,
+          mimeType: file.type,
+          profileId: profile.id,
+          storagePath,
+          type: assetType,
+        },
+      });
+    });
+  } catch {
+    await removeStoredInvoiceAsset(storagePath);
+    redirect("/settings/profile?assetError=db");
+  }
+
+  for (const oldStoragePath of oldStoragePaths) {
+    try {
+      await removeStoredInvoiceAsset(oldStoragePath);
+    } catch {
+      // The new DB state is already committed; stale files can be cleaned up later.
+    }
+  }
+
+  revalidatePath("/settings/profile");
+  revalidatePath("/invoices");
+  redirect("/settings/profile?assetSaved=1");
+}
+
+export async function deleteInvoiceAsset(assetId: string) {
+  let storagePath: string | null = null;
+
+  try {
+    const asset = await prisma.invoiceAsset.delete({
+      select: { storagePath: true },
+      where: { id: assetId },
+    });
+
+    storagePath = asset.storagePath;
+  } catch {
+    redirect("/settings/profile?assetError=delete");
+  }
+
+  try {
+    await removeStoredInvoiceAsset(storagePath);
+  } catch {
+    // The asset row is gone; a leftover file must not block the user flow.
+  }
+
+  revalidatePath("/settings/profile");
+  revalidatePath("/invoices");
+  redirect("/settings/profile?assetDeleted=1");
 }

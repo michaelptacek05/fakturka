@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ClientForm } from "@/components/clients/client-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
+import { getValidationMessage } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -29,15 +30,11 @@ function getErrorMessage(error?: string | string[]) {
     return "Změny se nepodařilo uložit, protože databáze není dostupná. Spusťte PostgreSQL a migrace, potom to zkuste znovu.";
   }
 
-  if (error === "validation") {
-    return "Zkontrolujte prosím povinné údaje: název odběratele a adresu.";
-  }
-
   if (error === "delete") {
     return "Odběratele se nepodařilo smazat. Zkontrolujte, zda nemá vystavené faktury.";
   }
 
-  return null;
+  return getValidationMessage(error);
 }
 
 export default async function ClientDetailPage({

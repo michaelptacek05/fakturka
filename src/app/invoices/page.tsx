@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FilePlus2 } from "lucide-react";
 
+import { InvoiceBulkTable } from "@/components/invoices/invoice-bulk-table";
 import { Button } from "@/components/ui/button";
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -75,6 +76,16 @@ export default async function InvoicesPage({
     status: statusFilter,
   });
   const hasFilters = Boolean(queryParam || statusFilter);
+  const deletedCount = typeof params?.deleted === "string" ? params.deleted : "";
+  const flashMessage = deletedCount
+    ? `Smazáno faktur: ${deletedCount}.`
+    : null;
+  const bulkErrorMessage =
+    params?.bulkError === "empty"
+      ? "Vyberte alespoň jednu fakturu."
+      : params?.bulkError === "db"
+        ? "Vybrané faktury se nepodařilo smazat, protože databáze není dostupná."
+        : null;
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
@@ -140,6 +151,18 @@ export default async function InvoicesPage({
         </section>
       )}
 
+      {flashMessage ? (
+        <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          {flashMessage}
+        </section>
+      ) : null}
+
+      {bulkErrorMessage ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {bulkErrorMessage}
+        </section>
+      ) : null}
+
       {invoices !== null && invoices.length === 0 ? (
         <section className="rounded-lg border border-zinc-200 bg-white p-8 text-center shadow-sm">
           <h2 className="text-lg font-semibold">
@@ -159,53 +182,18 @@ export default async function InvoicesPage({
       ) : null}
 
       {invoices !== null && invoices.length > 0 ? (
-        <section className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-sm">
-              <thead className="bg-zinc-100 text-left text-zinc-600">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Číslo</th>
-                  <th className="px-4 py-3 font-medium">Odběratel</th>
-                  <th className="px-4 py-3 font-medium">Vystaveno</th>
-                  <th className="px-4 py-3 font-medium">Splatnost</th>
-                  <th className="px-4 py-3 text-right font-medium">Celkem</th>
-                  <th className="px-4 py-3 font-medium">Stav</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((invoice) => (
-                  <tr className="border-t border-zinc-200" key={invoice.id}>
-                    <td className="px-4 py-3 font-medium">
-                      <Link
-                        href={`/invoices/${invoice.id}`}
-                        className="text-zinc-950 underline-offset-4 hover:underline"
-                      >
-                        {invoice.number}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-zinc-700">
-                      {invoice.client.companyName ?? invoice.client.fullName}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-700">
-                      {formatDate(invoice.issueDate)}
-                    </td>
-                    <td className="px-4 py-3 text-zinc-700">
-                      {formatDate(invoice.dueDate)}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      {formatCurrency(invoice.total)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
-                        {statusLabels[invoice.status] ?? invoice.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <InvoiceBulkTable
+          invoices={invoices.map((invoice) => ({
+            clientName: invoice.client.companyName ?? invoice.client.fullName ?? "-",
+            dueDate: formatDate(invoice.dueDate),
+            href: `/invoices/${invoice.id}`,
+            id: invoice.id,
+            issueDate: formatDate(invoice.issueDate),
+            number: invoice.number,
+            statusLabel: statusLabels[invoice.status] ?? invoice.status,
+            total: formatCurrency(invoice.total),
+          }))}
+        />
       ) : null}
     </main>
   );

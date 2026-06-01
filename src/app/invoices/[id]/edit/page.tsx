@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { InvoiceStatus, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatDateInput } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { getValidationMessage } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -37,15 +38,11 @@ function getErrorMessage(error?: string | string[]) {
     return "Změny se nepodařilo uložit, protože databáze není dostupná. Spusťte PostgreSQL a migrace, potom to zkuste znovu.";
   }
 
-  if (error === "validation") {
-    return "Zkontrolujte prosím povinné údaje odběratele a položky faktury.";
-  }
-
   if (error === "readonly") {
     return "Fakturu nelze upravovat, protože je zaplacená nebo stornovaná.";
   }
 
-  return null;
+  return getValidationMessage(error);
 }
 
 export default async function InvoiceEditPage({

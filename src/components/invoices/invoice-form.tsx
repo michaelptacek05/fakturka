@@ -44,6 +44,16 @@ type InvoiceFormProps = {
   submitLabel?: string;
 };
 
+const dueDatePresets = [
+  { label: "Dnes", value: "0" },
+  { label: "Týden", value: "7" },
+  { label: "10 dní", value: "10" },
+  { label: "14 dní", value: "14" },
+  { label: "Měsíc", value: "30" },
+  { label: "Jiná...", value: "custom" },
+] as const;
+type DueDatePreset = (typeof dueDatePresets)[number]["value"];
+
 const inputClass =
   "h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200";
 const labelClass = "grid gap-1.5 text-sm font-medium text-zinc-700";
@@ -60,6 +70,60 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     style: "currency",
   }).format(value);
+}
+
+function parseDateInput(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysToInputDate(value: string, days: number) {
+  const date = parseDateInput(value);
+
+  if (!date) {
+    return value;
+  }
+
+  date.setDate(date.getDate() + days);
+  return formatDateInput(date);
+}
+
+function getDayDiff(startValue: string, endValue: string) {
+  const start = parseDateInput(startValue);
+  const end = parseDateInput(endValue);
+
+  if (!start || !end) {
+    return null;
+  }
+
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+function getInitialDueDatePreset(
+  issueDate: string,
+  dueDate: string,
+): DueDatePreset {
+  const diff = getDayDiff(issueDate, dueDate);
+  const preset = dueDatePresets.find((item) => item.value === String(diff));
+
+  return preset?.value ?? "custom";
 }
 
 function createEmptyRow(): InvoiceRow {
@@ -94,6 +158,14 @@ export function InvoiceForm({
 
     return [{ ...createEmptyRow(), name: "Konzultační služby", unitPrice: "1000" }];
   });
+  const [issueDate, setIssueDate] = useState(defaultIssueDate);
+  const [taxableSupplyDate, setTaxableSupplyDate] = useState(
+    defaultTaxableSupplyDate ?? defaultIssueDate,
+  );
+  const [dueDate, setDueDate] = useState(defaultDueDate);
+  const [dueDatePreset, setDueDatePreset] = useState<DueDatePreset>(() =>
+    getInitialDueDatePreset(defaultIssueDate, defaultDueDate),
+  );
 
   const values: InvoiceFormValues = {
     clientCity: defaultValues?.clientCity ?? "",
@@ -144,16 +216,33 @@ export function InvoiceForm({
     );
   }
 
+  function updateDueDateFromInput(nextDueDate: string) {
+    const diff = getDayDiff(issueDate, nextDueDate);
+    const preset = dueDatePresets.find((item) => item.value === String(diff));
+
+    setDueDate(nextDueDate);
+    setDueDatePreset(preset?.value ?? "custom");
+  }
+
   return (
     <form action={action} className="grid gap-6">
-      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-3">
+      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-4">
         <label className={labelClass}>
           Datum vystavení
           <input
             className={inputClass}
             type="date"
             name="issueDate"
-            defaultValue={defaultIssueDate}
+            value={issueDate}
+            onChange={(event) => {
+              const nextIssueDate = event.target.value;
+
+              setIssueDate(nextIssueDate);
+
+              if (dueDatePreset !== "custom") {
+                setDueDate(addDaysToInputDate(nextIssueDate, Number(dueDatePreset)));
+              }
+            }}
             disabled={!isEditable}
           />
         </label>
@@ -163,9 +252,33 @@ export function InvoiceForm({
             className={inputClass}
             type="date"
             name="taxableSupplyDate"
-            defaultValue={defaultTaxableSupplyDate ?? defaultIssueDate}
+            value={taxableSupplyDate}
+            onChange={(event) => setTaxableSupplyDate(event.target.value)}
             disabled={!isEditable}
           />
+        </label>
+        <label className={labelClass}>
+          Splatnost za
+          <select
+            className={inputClass}
+            value={dueDatePreset}
+            onChange={(event) => {
+              const nextPreset = event.target.value as DueDatePreset;
+
+              setDueDatePreset(nextPreset);
+
+              if (nextPreset !== "custom") {
+                setDueDate(addDaysToInputDate(issueDate, Number(nextPreset)));
+              }
+            }}
+            disabled={!isEditable}
+          >
+            {dueDatePresets.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
         </label>
         <label className={labelClass}>
           Splatnost
@@ -173,7 +286,11 @@ export function InvoiceForm({
             className={inputClass}
             type="date"
             name="dueDate"
-            defaultValue={defaultDueDate}
+            value={dueDate}
+            onChange={(event) => updateDueDateFromInput(event.target.value)}
+            onInput={(event) =>
+              updateDueDateFromInput(event.currentTarget.value)
+            }
             disabled={!isEditable}
           />
         </label>

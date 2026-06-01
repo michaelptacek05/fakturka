@@ -21,7 +21,13 @@ export async function GET(_request: Request, { params }: InvoicePdfRouteProps) {
       items: {
         orderBy: { position: "asc" },
       },
-      profile: true,
+      profile: {
+        include: {
+          assets: {
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      },
     },
     where: { id },
   });

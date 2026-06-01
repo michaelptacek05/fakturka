@@ -1,12 +1,19 @@
 import Link from "next/link";
-import { Save } from "lucide-react";
+import Image from "next/image";
+import { Save, Trash2, Upload } from "lucide-react";
 
-import { upsertProfile } from "@/app/actions";
+import {
+  deleteInvoiceAsset,
+  uploadInvoiceAsset,
+  upsertProfile,
+} from "@/app/actions";
 import { CompanyLookup } from "@/components/ares/company-lookup";
 import { Button } from "@/components/ui/button";
-import { VatPayerStatus } from "@/generated/prisma/enums";
+import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
+import { getInvoiceAssetTypeLabel } from "@/lib/invoice-assets";
 import { prisma } from "@/lib/prisma";
 import { validateBankProfile } from "@/lib/spayd";
+import { getValidationMessage } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +24,11 @@ const labelClass = "grid gap-1.5 text-sm font-medium text-zinc-700";
 async function getProfile() {
   try {
     return await prisma.userProfile.findFirst({
+      include: {
+        assets: {
+          orderBy: { createdAt: "desc" },
+        },
+      },
       orderBy: { createdAt: "asc" },
     });
   } catch {
@@ -29,8 +41,32 @@ function getErrorMessage(error?: string | string[]) {
     return "Databáze není dostupná. Spusťte PostgreSQL, aplikujte migrace a zkuste uložit údaje znovu.";
   }
 
+  return getValidationMessage(error);
+}
+
+function getAssetErrorMessage(error?: string | string[]) {
+  if (error === "missing") {
+    return "Vyberte prosím soubor k nahrání.";
+  }
+
+  if (error === "type") {
+    return "Podporované formáty jsou PNG, JPG a WebP.";
+  }
+
+  if (error === "size") {
+    return "Soubor je příliš velký. Maximální velikost je 2 MB.";
+  }
+
+  if (error === "delete") {
+    return "Asset se nepodařilo smazat.";
+  }
+
+  if (error === "db") {
+    return "Asset se nepodařilo uložit, protože databáze nebo storage nejsou dostupné.";
+  }
+
   if (error === "validation") {
-    return "Zkontrolujte prosím povinné údaje: jméno nebo firmu, adresu, IČO, číslo účtu a kód banky.";
+    return "Typ assetu není platný.";
   }
 
   return null;
@@ -44,6 +80,13 @@ export default async function ProfilePage({
   const params = await searchParams;
   const profile = await getProfile();
   const errorMessage = getErrorMessage(params?.error);
+  const assetErrorMessage = getAssetErrorMessage(params?.assetError);
+  const assetFlashMessage =
+    params?.assetSaved === "1"
+      ? "Asset byl uložen."
+      : params?.assetDeleted === "1"
+        ? "Asset byl smazán."
+        : null;
   const bankValidation = profile
     ? validateBankProfile({
         accountNumber: profile.accountNumber,
@@ -70,6 +113,18 @@ export default async function ProfilePage({
       {errorMessage ? (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           {errorMessage}
+        </section>
+      ) : null}
+
+      {assetErrorMessage ? (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {assetErrorMessage}
+        </section>
+      ) : null}
+
+      {assetFlashMessage ? (
+        <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          {assetFlashMessage}
         </section>
       ) : null}
 
@@ -243,6 +298,86 @@ export default async function ProfilePage({
           </Button>
         </div>
       </form>
+
+      {profile ? (
+        <section className="grid gap-5 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="text-base font-semibold">Logo a podpis</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Nahrajte volitelné obrázky pro webovou fakturu a PDF export.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              InvoiceAssetType.LOGO,
+              InvoiceAssetType.SIGNATURE,
+              InvoiceAssetType.STAMP,
+            ].map((assetType) => {
+              const asset = profile.assets.find((item) => item.type === assetType);
+
+              return (
+                <div
+                  className="grid gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4"
+                  key={assetType}
+                >
+                  <div>
+                    <h3 className="font-medium">
+                      {getInvoiceAssetTypeLabel(assetType)}
+                    </h3>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      PNG, JPG nebo WebP do 2 MB.
+                    </p>
+                  </div>
+
+                  {asset ? (
+                    <div className="grid gap-3">
+                      <div className="grid h-32 place-items-center rounded-md border border-zinc-200 bg-white p-2">
+                        <Image
+                          src={`/invoice-assets/${asset.id}`}
+                          alt={getInvoiceAssetTypeLabel(asset.type)}
+                          width={180}
+                          height={96}
+                          className="max-h-24 w-auto object-contain"
+                          unoptimized
+                        />
+                      </div>
+                      <p className="truncate text-xs text-zinc-500">
+                        {asset.fileName}
+                      </p>
+                      <form action={deleteInvoiceAsset.bind(null, asset.id)}>
+                        <Button type="submit" variant="outline" className="w-full">
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Smazat
+                        </Button>
+                      </form>
+                    </div>
+                  ) : (
+                    <div className="grid h-32 place-items-center rounded-md border border-dashed border-zinc-300 bg-white text-xs text-zinc-500">
+                      Nenahráno
+                    </div>
+                  )}
+
+                  <form action={uploadInvoiceAsset} className="grid gap-3">
+                    <input type="hidden" name="assetType" value={assetType} />
+                    <input
+                      className="block w-full text-xs text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white"
+                      name="assetFile"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      required
+                    />
+                    <Button type="submit" variant="outline" className="w-full">
+                      <Upload className="size-4" aria-hidden="true" />
+                      Nahrát
+                    </Button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

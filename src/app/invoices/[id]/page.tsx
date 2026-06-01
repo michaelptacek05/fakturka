@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Download } from "lucide-react";
 
@@ -6,7 +7,7 @@ import { InvoiceStatusActions } from "@/components/invoices/invoice-status-actio
 import { PaymentQr } from "@/components/invoices/payment-qr";
 import { PrintButton } from "@/components/invoices/print-button";
 import { Button } from "@/components/ui/button";
-import { VatPayerStatus } from "@/generated/prisma/enums";
+import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -27,7 +28,13 @@ async function getInvoice(id: string) {
         items: {
           orderBy: { position: "asc" },
         },
-        profile: true,
+        profile: {
+          include: {
+            assets: {
+              orderBy: { createdAt: "desc" },
+            },
+          },
+        },
       },
       where: { id },
     });
@@ -66,6 +73,15 @@ export default async function InvoiceDetailPage({
   const supplierName = invoice.profile.companyName || invoice.profile.displayName;
   const clientName = invoice.client.companyName || invoice.client.fullName || "";
   const isVatPayer = invoice.profile.vatPayerStatus === VatPayerStatus.PAYER;
+  const logo = invoice.profile.assets.find(
+    (asset) => asset.type === InvoiceAssetType.LOGO,
+  );
+  const signature = invoice.profile.assets.find(
+    (asset) => asset.type === InvoiceAssetType.SIGNATURE,
+  );
+  const stamp = invoice.profile.assets.find(
+    (asset) => asset.type === InvoiceAssetType.STAMP,
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 print:block print:max-w-none print:p-0">
@@ -108,13 +124,25 @@ export default async function InvoiceDetailPage({
 
       <article className="print-sheet mx-auto min-h-[297mm] w-full max-w-[210mm] bg-white p-8 text-zinc-950 shadow-sm ring-1 ring-zinc-200 print:min-h-0 print:w-auto print:max-w-none print:p-0 print:shadow-none print:ring-0">
         <header className="flex flex-col gap-8 border-b-2 border-zinc-950 pb-8 sm:flex-row sm:items-start sm:justify-between print:flex-row">
-          <div>
+          <div className="flex items-start gap-4">
+            {logo ? (
+              <Image
+                src={`/invoice-assets/${logo.id}`}
+                alt="Logo"
+                width={96}
+                height={64}
+                className="max-h-16 w-auto object-contain"
+                unoptimized
+              />
+            ) : null}
+            <div>
             <p className="text-sm font-medium uppercase tracking-wide text-zinc-500">
               {isVatPayer ? "Faktura - daňový doklad" : "Faktura"}
             </p>
             <h2 className="mt-2 text-3xl font-semibold tracking-normal">
               {invoice.number}
             </h2>
+            </div>
           </div>
           <div className="text-left text-sm sm:text-right print:text-right">
             <p className="font-semibold">{supplierName}</p>
@@ -262,6 +290,40 @@ export default async function InvoiceDetailPage({
               swift={invoice.profile.swift}
               variableSymbol={invoice.variableSymbol}
             />
+            {signature || stamp ? (
+              <div className="mt-5 flex flex-wrap items-end gap-4">
+                {signature ? (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Podpis
+                    </p>
+                    <Image
+                      src={`/invoice-assets/${signature.id}`}
+                      alt="Podpis"
+                      width={160}
+                      height={80}
+                      className="mt-2 max-h-20 w-auto object-contain"
+                      unoptimized
+                    />
+                  </div>
+                ) : null}
+                {stamp ? (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Razítko
+                    </p>
+                    <Image
+                      src={`/invoice-assets/${stamp.id}`}
+                      alt="Razítko"
+                      width={120}
+                      height={90}
+                      className="mt-2 max-h-24 w-auto object-contain"
+                      unoptimized
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {invoice.notes ? <p className="mt-5 text-zinc-700">{invoice.notes}</p> : null}
           </div>
 

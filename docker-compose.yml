@@ -42,6 +42,9 @@ services:
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
       - "${APP_PORT:-3000}:3000"
+    volumes:
+      - invoice_storage:/app/storage
 
 volumes:
+  invoice_storage:
   postgres_data:

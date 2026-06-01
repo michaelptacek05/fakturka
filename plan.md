@@ -26,28 +26,15 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 
 ### In Progress
 
-- Fáze 6: PDF a QR platba
-  - Webový detail faktury už zobrazuje SPAYD QR platbu.
-  - Server-side PDF export je přidaný přes `/invoices/[id]/pdf`.
-  - Zbývá logo a podpis/razítko ve faktuře.
+- Žádná aktivní fáze.
 
 ### To Do
 
-- Fáze 6C: Logo a podpis
-  - Logo a podpis/razítko ve faktuře.
-
-- Fáze 7: Dashboard
-  - Příjmy za měsíc, kvartál a rok.
-  - Vývoj příjmů v čase.
-  - Nezaplaceno po splatnosti.
-  - Indikátor obratu pro DPH limit 2 mil. Kč za 12 měsíců.
-  - Odhad sociálního, zdravotního a daně při paušálních výdajích 60 %.
-
-- Fáze 8: Produkční stabilizace
-  - Validace vstupů.
-  - Seed/demo data.
-  - Docker smoke test.
-  - Dokumentace proměnných prostředí a nasazení přes Portainer.
+- Další rozvoj
+  - Důkladnější automatizované testy.
+  - Exporty přehledů.
+  - Lepší produkční observabilita.
+  - Případná autentizace pro veřejnější nasazení.
 
 ### Done
 
@@ -116,6 +103,33 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
   - PDF se generuje server-side z DB dat přes route handler.
   - PDF obsahuje Dodavatele, Odběratele, data, symboly, položky, součty, platební údaje a QR platbu.
   - Detail faktury obsahuje tlačítko `Stáhnout PDF`.
+- Fáze 6C: Logo a podpis
+  - Přidána správa assetů do `/settings/profile`.
+  - Assety se ukládají lokálně do `storage/invoice-assets` mimo Git.
+  - Přidána route `/invoice-assets/[id]` pro bezpečné servírování uložených obrázků.
+  - Podporované typy jsou logo, podpis a razítko.
+  - Webová faktura zobrazuje logo v hlavičce a podpis/razítko ve spodní části.
+  - PDF export vkládá logo a podpis/razítko, pokud existují a soubor je dostupný.
+- Fáze 7: Dashboard
+  - Úvodní stránka používá reálná data z `Invoice` místo mock hodnot.
+  - Přidány metriky zaplacených příjmů za měsíc, kvartál a rok podle `paidAt`.
+  - Přidán přehled nezaplacených a po splatnosti vystavených faktur.
+  - Přidán 12měsíční sloupcový graf zaplacených příjmů bez nové grafové knihovny.
+  - Přidán indikátor obratu vůči DPH limitu 2 mil. Kč za posledních 12 měsíců.
+  - Přidán orientační odhad daně, sociálního a zdravotního při paušálních výdajích 60 %.
+  - Přidán přehled posledních faktur a rychlé odkazy do fakturačního workflow.
+- Fáze 8: Produkční stabilizace
+  - Přidány sdílené validační helpery pro IČO, DIČ, e-mail, účet, IBAN, částky a množství.
+  - Server actions vrací konkrétnější validační chyby přes současný redirect/query-param styl.
+  - Přidán idempotentní demo seed skript `npm run prisma:seed`.
+  - Docker Compose obsahuje persistentní volume `invoice_storage` pro lokální assety ve `storage/`.
+  - Docker image připravuje zapisovatelný adresář `/app/storage`.
+  - README bylo aktualizováno pro aktuální funkce, seed, Docker, Portainer a zálohování.
+  - Přidán public readiness checklist před commitem nebo publikací.
+- Hromadná správa faktur
+  - Seznam faktur umožňuje vybrat více faktur najednou.
+  - Vybrané faktury lze hromadně smazat s potvrzením.
+  - Vybrané faktury lze exportovat do CSV přehledu přes `/invoices/export`.
 
 ## Technické poznámky
 
@@ -139,4 +153,4 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 
 ## Bezprostřední další krok
 
-Pokračovat logem a podpisem/razítkem: upload `InvoiceAsset`, zobrazení ve webové faktuře a vložení do PDF.
+Projekt je připravený na finální kontrolu před commitem/publikací: spustit lint, build, seed, Docker smoke test a zkontrolovat, že `.env` ani `storage/` nejsou trackované.

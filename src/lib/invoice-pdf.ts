@@ -2,8 +2,9 @@ import fs from "node:fs";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 
-import { VatPayerStatus } from "@/generated/prisma/enums";
+import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
+import { getInvoiceAssetAbsolutePath } from "@/lib/invoice-assets";
 import {
   buildSpaydPayload,
   sanitizeSpaydPayload,
@@ -38,6 +39,12 @@ type PdfInvoice = {
   number: string;
   profile: {
     accountNumber: string;
+    assets: Array<{
+      id: string;
+      mimeType: string;
+      storagePath: string;
+      type: InvoiceAssetType;
+    }>;
     bankCode: string;
     city: string;
     companyName: string | null;
@@ -148,6 +155,40 @@ function drawTotals(
   });
 }
 
+function getPdfImagePath(
+  assets: PdfInvoice["profile"]["assets"],
+  type: InvoiceAssetType,
+) {
+  const asset = assets.find((item) => item.type === type);
+
+  if (!asset || !["image/jpeg", "image/png"].includes(asset.mimeType)) {
+    return null;
+  }
+
+  const assetPath = getInvoiceAssetAbsolutePath(asset.storagePath);
+
+  return fs.existsSync(assetPath) ? assetPath : null;
+}
+
+function drawImageIfAvailable(
+  document: PDFKit.PDFDocument,
+  imagePath: string | null,
+  x: number,
+  y: number,
+  options: PDFKit.Mixins.ImageOption,
+) {
+  if (!imagePath) {
+    return false;
+  }
+
+  try {
+    document.image(imagePath, x, y, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function renderInvoicePdf(invoice: PdfInvoice) {
   const fontPath = resolveFont();
   const document = new PDFDocument({
@@ -172,6 +213,12 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
   const clientName = invoice.client.companyName || invoice.client.fullName || "";
   const isVatPayer = invoice.profile.vatPayerStatus === VatPayerStatus.PAYER;
   const payment = validateBankProfile(invoice.profile);
+  const logoPath = getPdfImagePath(invoice.profile.assets, InvoiceAssetType.LOGO);
+  const signaturePath = getPdfImagePath(
+    invoice.profile.assets,
+    InvoiceAssetType.SIGNATURE,
+  );
+  const stampPath = getPdfImagePath(invoice.profile.assets, InvoiceAssetType.STAMP);
   const spaydPayload = sanitizeSpaydPayload(buildSpaydPayload({
     accountNumber: invoice.profile.accountNumber,
     amount: invoice.total,
@@ -189,12 +236,21 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
     type: "png",
   });
 
+  const hasLogo = drawImageIfAvailable(document, logoPath, 40, 38, {
+    fit: [90, 54],
+  });
+  const titleX = hasLogo ? 145 : 40;
+
   document
     .font(fonts.regular)
     .fillColor("#71717a")
     .fontSize(10)
-    .text(isVatPayer ? "Faktura - daňový doklad" : "Faktura", 40, 40);
-  document.font(fonts.bold).fillColor("#18181b").fontSize(26).text(invoice.number, 40, 58);
+    .text(isVatPayer ? "Faktura - daňový doklad" : "Faktura", titleX, 40);
+  document
+    .font(fonts.bold)
+    .fillColor("#18181b")
+    .fontSize(26)
+    .text(invoice.number, titleX, 58);
   writeLines(
     document,
     [supplierName, invoice.profile.street, `${invoice.profile.postalCode} ${invoice.profile.city}`, invoice.profile.country],
@@ -306,6 +362,22 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
     lineBreak: false,
     width: 380,
   });
+
+  const assetTop = footerTop + 180;
+  const hasSignature = drawImageIfAvailable(document, signaturePath, 40, assetTop, {
+    fit: [130, 60],
+  });
+  const hasStamp = drawImageIfAvailable(document, stampPath, 190, assetTop - 10, {
+    fit: [95, 75],
+  });
+
+  if (hasSignature) {
+    writeLabel(document, "Podpis", 40, assetTop - 14);
+  }
+
+  if (hasStamp) {
+    writeLabel(document, "Razítko", 190, assetTop - 24);
+  }
 
   drawTotals(document, invoice, 295, footerTop + 35, fonts);
 

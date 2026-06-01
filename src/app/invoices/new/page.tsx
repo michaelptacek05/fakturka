@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { VatPayerStatus } from "@/generated/prisma/enums";
 import { addDays, formatDateInput } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { getValidationMessage } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,7 @@ function getErrorMessage(error?: string | string[]) {
     return "Fakturu se nepodařilo uložit, protože databáze není dostupná. Spusťte PostgreSQL a migrace, potom to zkuste znovu.";
   }
 
-  if (error === "validation") {
-    return "Faktura nejde uložit. Zkontrolujte odběratele a položky: název, množství větší než nula a cenu.";
-  }
-
-  return null;
+  return getValidationMessage(error);
 }
 
 export default async function NewInvoicePage({
