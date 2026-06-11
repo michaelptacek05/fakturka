@@ -11,26 +11,25 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
 
   migrate:
-    build:
-      context: .
-      target: migrator
+    image: ghcr.io/michaelptacek05/fakturka:latest
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
+    command: ["npm", "run", "prisma:deploy"]
     restart: "no"
+    networks:
+      - internal
 
   app:
-    build:
-      context: .
-      target: runner
+    image: ghcr.io/michaelptacek05/fakturka:latest
     restart: unless-stopped
     depends_on:
       db:
@@ -40,11 +39,17 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-    ports:
-      - "${APP_PORT:-3000}:3000"
     volumes:
       - invoice_storage:/app/storage
+    networks:
+      - internal
+      - nginx-proxy-manager_default
 
 volumes:
   invoice_storage:
   postgres_data:
+
+networks:
+  internal:
+  nginx-proxy-manager_default:
+    external: true

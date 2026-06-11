@@ -17,6 +17,21 @@ const statusLabels: Record<string, string> = {
   [InvoiceStatus.PAID]: "Zaplaceno",
 };
 
+function getInvoiceVisualState(invoice: {
+  dueDate: Date;
+  paidAt: Date | null;
+  status: InvoiceStatus;
+}) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  if (invoice.status !== InvoiceStatus.ISSUED || invoice.paidAt !== null) {
+    return "default";
+  }
+
+  return invoice.dueDate < todayStart ? "overdue" : "unpaid";
+}
+
 async function getInvoices({
   query,
   status,
@@ -192,6 +207,7 @@ export default async function InvoicesPage({
             number: invoice.number,
             statusLabel: statusLabels[invoice.status] ?? invoice.status,
             total: formatCurrency(invoice.total),
+            visualState: getInvoiceVisualState(invoice),
           }))}
         />
       ) : null}

@@ -6,6 +6,9 @@ import { useMemo, useState } from "react";
 
 import { deleteInvoices } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type InvoiceVisualState = "default" | "unpaid" | "overdue";
 
 type InvoiceBulkRow = {
   clientName: string;
@@ -16,10 +19,23 @@ type InvoiceBulkRow = {
   number: string;
   statusLabel: string;
   total: string;
+  visualState: InvoiceVisualState;
 };
 
 type InvoiceBulkTableProps = {
   invoices: InvoiceBulkRow[];
+};
+
+const rowClasses: Record<InvoiceVisualState, string> = {
+  default: "border-zinc-200",
+  overdue: "border-red-200 bg-red-50/80 hover:bg-red-100/70",
+  unpaid: "border-amber-200 bg-amber-50/80 hover:bg-amber-100/70",
+};
+
+const statusClasses: Record<InvoiceVisualState, string> = {
+  default: "bg-zinc-100 text-zinc-700",
+  overdue: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
+  unpaid: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200",
 };
 
 export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
@@ -116,7 +132,13 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
               const checked = selectedIds.includes(invoice.id);
 
               return (
-                <tr className="border-t border-zinc-200" key={invoice.id}>
+                <tr
+                  className={cn(
+                    "border-t transition-colors",
+                    rowClasses[invoice.visualState],
+                  )}
+                  key={invoice.id}
+                >
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
@@ -148,7 +170,12 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
                     {invoice.total}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-700">
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-1 text-xs font-medium",
+                        statusClasses[invoice.visualState],
+                      )}
+                    >
                       {invoice.statusLabel}
                     </span>
                   </td>
