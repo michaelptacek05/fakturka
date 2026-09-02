@@ -21,6 +21,9 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 - `InvoiceItem`: položky faktury, množství, jednotka, cena, sazba DPH, vypočtené součty.
 - `InvoiceSequence`: nastavení formátu a poslední použité číslo.
 - `InvoiceAsset`: volitelné soubory pro logo, podpis nebo razítko, pokud nebudou drženy přímo v profile.
+- `Project`: zakázka pod odběratelem, stav, priorita, termíny a popis.
+- `Task`: úkol pod projektem, stav odpovídá sloupci nástěnky, priorita a ruční pořadí.
+- `TaskNote`: časované poznámky k úkolu.
 
 ## Fáze a stav
 
@@ -31,10 +34,11 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 ### To Do
 
 - Další rozvoj
-  - Důkladnější automatizované testy.
-  - Exporty přehledů.
+  - Integrační testy nad databází (zatím jsou pokryté jen čisté funkce).
+  - Export pro účetní programy, například ISDOC.
+  - Propojení projektů s fakturací, tedy vyfakturováno na projektu.
   - Lepší produkční observabilita.
-  - Případná autentizace pro veřejnější nasazení.
+  - Podpora více měn v přehledech a QR platbě.
 
 ### Done
 
@@ -130,6 +134,73 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
   - Seznam faktur umožňuje vybrat více faktur najednou.
   - Vybrané faktury lze hromadně smazat s potvrzením.
   - Vybrané faktury lze exportovat do CSV přehledu přes `/invoices/export`.
+- Fáze 9: Oprava nasazení a produkční mezery
+  - Opraven Docker workflow: publikovaný `:latest` neobsahuje Prisma CLI ani
+    migrace, proto se stage `migrator` publikuje zvlášť jako `:migrate` a
+    compose ho používá pro jednorázovou službu `migrate`.
+  - CI staví a pushuje oba image a před tím spouští lint, typecheck a testy.
+  - `docker-compose.yml` je produkční stack pro Portainer: DNS 1.1.1.1 a 8.8.8.8,
+    externí síť `nginx-proxy-manager_default`, povinné heslo k databázi i aplikaci.
+  - Přidán `docker-compose.dev.yml` pro lokální vývoj s publikovaným portem
+    databáze a buildem ze zdrojáků.
+  - Přidán healthcheck `/api/health`, který ověřuje i spojení s databází.
+  - Image má napevno `TZ=UTC`, aby se data dokladů neposouvala o den.
+  - README srovnáno se skutečným chováním compose.
+- Fáze 10: Přihlášení
+  - Přidáno přihlášení jedním heslem z `AUTH_PASSWORD`.
+  - Session je podepsaný token v HttpOnly cookie, podpis přes Web Crypto.
+  - `src/proxy.ts` chrání všechny routy kromě `/login` a `/api/health`.
+  - Změna hesla nebo `AUTH_SECRET` zneplatní existující relace.
+  - Bez nastaveného hesla aplikace běží dál, ale zobrazuje varovný pruh.
+  - Přidáno omezení počtu neúspěšných pokusů.
+- Fáze 11: Datové opravy
+  - Faktura má snapshot odběratele. Úprava adresáře už nemění vystavené doklady.
+  - Číselná řada se resetuje podle období odvozeného z formátu čísla.
+  - Formát čísla faktury je volitelný v nastavení.
+  - Vystavení faktury zamyká řádek číselné řady, aby dvě souběžná uložení
+    nedostala stejné číslo.
+  - Variabilní symbol se zkracuje na deset číslic.
+  - ARES endpoint má timeout, ošetřené výpadky a jednoduchý rate limit.
+  - Servírování assetů kontroluje, že cesta nevede mimo adresář `storage`.
+- Fáze 12: Import z Fakturoidu
+  - Přidána route `/import` s importem odběratelů a faktur z CSV.
+  - Sloupce se poznají podle názvů z Fakturoid API i podle českých hlaviček.
+  - Parser zvládá oddělovače `;,\t|`, UTF-8 i Windows-1250 a české i anglické
+    zápisy čísel a dat.
+  - Položkový export se skládá zpět do jedné faktury podle čísla dokladu.
+  - Export bez položek se naimportuje jako jedna položka z celkové částky.
+  - Náhled s upozorněními běží v prohlížeči, server data validuje znovu.
+  - Import je idempotentní a po doběhnutí posune číselnou řadu.
+- Fáze 13: Sjednocení designu
+  - Přidány UI primitivy: Card, Input, Select, Textarea, Label, Field, Badge,
+    Alert, Table, EmptyState, PageHeader.
+  - Nové barevné tokeny včetně stavových barev a funkční tmavý motiv
+    s přepínačem bez probliknutí.
+  - Přepsány všechny stránky a formuláře na sdílené komponenty.
+  - Navigace má aktivní stav a mobilní menu.
+  - Stav faktury po splatnosti se zobrazuje jednotně v seznamu i na dashboardu.
+  - Ladicí výpis SPAYD payloadu se už netiskne na faktuře.
+- Fáze 14: Testy
+  - Přidán Vitest a sada testů nad čistou logikou.
+  - Pokryto číslování faktur, CSV parser, import z Fakturoidu a validace.
+- Fáze 15: Projekty a úkoly
+  - Přidány modely `Project`, `Task` a `TaskNote` s enumy pro stav a prioritu.
+  - Route `/projects` seskupuje projekty podle odběratele, `/projects/new`
+    a `/projects/[id]` řeší založení a úpravu včetně smazání s potvrzením.
+  - Odběratel je na projektu volitelný, aby šlo vést i interní projekty.
+  - Route `/tasks` je nástěnka ve stylu Jiry s pěti sloupci podle stavu,
+    filtrem na projekt a prioritu a rychlým přidáním úkolu.
+  - Přesun mezi sloupci řeší drag & drop s optimistickým překreslením přes
+    `useOptimistic`; na dotykových displejích se stav mění výběrem na kartě.
+  - Pořadí karet je vedené v rámci sloupce napříč projekty, při shodě
+    rozhoduje priorita a potom termín.
+  - Přesun do sloupce Hotovo vyplní datum dokončení, návrat zpět ho zruší.
+  - Detail projektu ukazuje vlastní nástěnku jen s jeho úkoly.
+  - Route `/tasks/[id]` má úpravu úkolu a vlákno časovaných poznámek.
+  - Detail odběratele odkazuje na založení projektu s předvyplněným klientem.
+  - Z hlavičky zmizela Nová faktura, zůstává na dashboardu a v agendě faktur.
+  - Seed doplněn o demo projekty, úkoly a poznámky.
+  - Seed nově ukládá časy v UTC, aby seděly s tím, co zapisuje aplikace.
 
 ## Technické poznámky
 
@@ -153,4 +224,8 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 
 ## Bezprostřední další krok
 
-Projekt je připravený na finální kontrolu před commitem/publikací: spustit lint, build, seed, Docker smoke test a zkontrolovat, že `.env` ani `storage/` nejsou trackované.
+Projekt je ověřený lokálně proti PostgreSQL: migrace včetně upgrade cesty s daty,
+seed, vystavení faktury, import z Fakturoidu, PDF i CSV export, přihlášení,
+projekty s úkoly včetně drag & dropu a poznámek, a mobilní zobrazení.
+Zbývá první nasazení na Portainer podle README a ověření QR platby v cílové
+bankovní aplikaci.

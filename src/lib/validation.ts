@@ -7,9 +7,11 @@ export type ValidationCode =
   | "account"
   | "amount"
   | "bank"
+  | "csv"
   | "date"
   | "dic"
   | "email"
+  | "format"
   | "iban"
   | "ico"
   | "item"
@@ -41,12 +43,16 @@ export function getValidationMessage(error?: string | string[]) {
       return "Zkontrolujte částky. Cena musí být nezáporné číslo a sazba DPH musí být mezi 0 a 100.";
     case "bank":
       return "Kód banky musí mít 4 číslice.";
+    case "csv":
+      return "Soubor se nepodařilo přečíst jako CSV. Zkontrolujte oddělovač a hlavičku.";
     case "date":
       return "Zkontrolujte data dokladu.";
     case "dic":
       return "DIČ nemá očekávaný formát.";
     case "email":
       return "E-mail nemá platný formát.";
+    case "format":
+      return "Formát čísla faktury musí obsahovat alespoň jeden znak # a jen běžné znaky.";
     case "iban":
       return "IBAN není platný.";
     case "ico":
@@ -55,6 +61,12 @@ export function getValidationMessage(error?: string | string[]) {
       return "Faktura musí mít alespoň jednu položku s názvem.";
     case "quantity":
       return "Množství položky musí být větší než nula.";
+    case "db":
+      return "Databáze není dostupná. Zkuste to prosím znovu.";
+    case "notfound":
+      return "Záznam nebyl nalezen.";
+    case "readonly":
+      return "Zaplacenou nebo stornovanou fakturu už nelze upravit.";
     case "required":
     case "validation":
       return "Zkontrolujte prosím povinné údaje.";

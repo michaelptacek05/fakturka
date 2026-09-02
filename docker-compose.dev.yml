@@ -1,0 +1,58 @@
+# Lokální vývoj: databáze s publikovaným portem a aplikace sestavená ze zdrojáků.
+#
+#   docker compose -f docker-compose.dev.yml up -d db     # jen databáze pro `npm run dev`
+#   docker compose -f docker-compose.dev.yml up --build    # celý stack z lokálních zdrojáků
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fakturka}
+      POSTGRES_USER: ${POSTGRES_USER:-fakturka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-fakturka} -d $${POSTGRES_DB:-fakturka}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      AUTH_SECRET: ${AUTH_SECRET:-dev-secret-nepouzivat-v-produkci}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - invoice_storage_dev:/app/storage
+
+volumes:
+  invoice_storage_dev:
+  postgres_data_dev:

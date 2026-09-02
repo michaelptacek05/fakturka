@@ -5,10 +5,20 @@ import { Download, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { deleteInvoices } from "@/app/actions";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  TableWrapper,
+} from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-type InvoiceVisualState = "default" | "unpaid" | "overdue";
+type InvoiceVisualState = "default" | "unpaid" | "overdue" | "paid" | "cancelled";
 
 type InvoiceBulkRow = {
   clientName: string;
@@ -26,22 +36,30 @@ type InvoiceBulkTableProps = {
   invoices: InvoiceBulkRow[];
 };
 
-const rowClasses: Record<InvoiceVisualState, string> = {
-  default: "border-zinc-200",
-  overdue: "border-red-200 bg-red-50/80 hover:bg-red-100/70",
-  unpaid: "border-amber-200 bg-amber-50/80 hover:bg-amber-100/70",
+/** Barevný proužek na začátku řádku nese stav i bez čtení textu. */
+const rowAccent: Record<InvoiceVisualState, string> = {
+  cancelled: "before:bg-transparent opacity-60",
+  default: "before:bg-transparent",
+  overdue: "before:bg-destructive",
+  paid: "before:bg-success",
+  unpaid: "before:bg-warning",
 };
 
-const statusClasses: Record<InvoiceVisualState, string> = {
-  default: "bg-zinc-100 text-zinc-700",
-  overdue: "bg-red-100 text-red-800 ring-1 ring-inset ring-red-200",
-  unpaid: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200",
+const badgeVariant: Record<
+  InvoiceVisualState,
+  "default" | "success" | "warning" | "destructive" | "outline"
+> = {
+  cancelled: "outline",
+  default: "default",
+  overdue: "destructive",
+  paid: "success",
+  unpaid: "warning",
 };
 
 export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectedCount = selectedIds.length;
-  const allSelected = selectedCount === invoices.length;
+  const allSelected = selectedCount > 0 && selectedCount === invoices.length;
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams();
 
@@ -65,7 +83,7 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
   return (
     <form
       action={deleteInvoices}
-      className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-xl border border-border bg-card shadow-xs"
       onSubmit={(event) => {
         if (selectedCount === 0) {
           event.preventDefault();
@@ -81,110 +99,108 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
         }
       }}
     >
-      <div className="flex flex-col gap-3 border-b border-zinc-200 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-zinc-600">
-          Vybráno <span className="font-medium text-zinc-950">{selectedCount}</span>{" "}
-          z {invoices.length}
+      <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Vybráno{" "}
+          <span className="font-medium text-foreground">{selectedCount}</span> z{" "}
+          {invoices.length}
         </p>
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button asChild variant="outline" aria-disabled={selectedCount === 0}>
-            <Link
-              href={selectedCount > 0 ? exportUrl : "#"}
-              onClick={(event) => {
-                if (selectedCount === 0) {
-                  event.preventDefault();
-                }
-              }}
-            >
+        <div className="flex flex-wrap gap-2">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            aria-disabled={selectedCount === 0}
+            className={selectedCount === 0 ? "pointer-events-none opacity-50" : ""}
+          >
+            <Link href={selectedCount > 0 ? exportUrl : "#"}>
               <Download className="size-4" aria-hidden="true" />
               Export CSV
             </Link>
           </Button>
-          <Button type="submit" variant="destructive" disabled={selectedCount === 0}>
+          <Button
+            type="submit"
+            variant="destructive"
+            size="sm"
+            disabled={selectedCount === 0}
+          >
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat vybrané
           </Button>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
-          <thead className="bg-zinc-100 text-left text-zinc-600">
-            <tr>
-              <th className="w-12 px-4 py-3">
+      <TableWrapper>
+        <Table className="min-w-[820px]">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-12">
                 <input
                   type="checkbox"
+                  className="size-4 accent-primary"
                   checked={allSelected}
                   onChange={(event) => toggleAll(event.target.checked)}
                   aria-label="Vybrat všechny faktury"
                 />
-              </th>
-              <th className="px-4 py-3 font-medium">Číslo</th>
-              <th className="px-4 py-3 font-medium">Odběratel</th>
-              <th className="px-4 py-3 font-medium">Vystaveno</th>
-              <th className="px-4 py-3 font-medium">Splatnost</th>
-              <th className="px-4 py-3 text-right font-medium">Celkem</th>
-              <th className="px-4 py-3 font-medium">Stav</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoices.map((invoice) => {
-              const checked = selectedIds.includes(invoice.id);
-
-              return (
-                <tr
-                  className={cn(
-                    "border-t transition-colors",
-                    rowClasses[invoice.visualState],
-                  )}
-                  key={invoice.id}
-                >
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      name="invoiceId"
-                      value={invoice.id}
-                      checked={checked}
-                      onChange={(event) =>
-                        toggleInvoice(invoice.id, event.target.checked)
-                      }
-                      aria-label={`Vybrat fakturu ${invoice.number}`}
-                    />
-                  </td>
-                  <td className="px-4 py-3 font-medium">
-                    <Link
-                      href={invoice.href}
-                      className="text-zinc-950 underline-offset-4 hover:underline"
-                    >
-                      {invoice.number}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-zinc-700">
-                    {invoice.clientName}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-700">
-                    {invoice.issueDate}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-700">{invoice.dueDate}</td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    {invoice.total}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs font-medium",
-                        statusClasses[invoice.visualState],
-                      )}
-                    >
-                      {invoice.statusLabel}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              </TableHead>
+              <TableHead>Číslo</TableHead>
+              <TableHead>Odběratel</TableHead>
+              <TableHead>Vystaveno</TableHead>
+              <TableHead>Splatnost</TableHead>
+              <TableHead className="text-right">Celkem</TableHead>
+              <TableHead>Stav</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {invoices.map((invoice) => (
+              <TableRow
+                key={invoice.id}
+                className={cn(
+                  "relative before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-['']",
+                  rowAccent[invoice.visualState],
+                )}
+              >
+                <TableCell>
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-primary"
+                    name="invoiceId"
+                    value={invoice.id}
+                    checked={selectedIds.includes(invoice.id)}
+                    onChange={(event) =>
+                      toggleInvoice(invoice.id, event.target.checked)
+                    }
+                    aria-label={`Vybrat fakturu ${invoice.number}`}
+                  />
+                </TableCell>
+                <TableCell className="font-medium">
+                  <Link
+                    href={invoice.href}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {invoice.number}
+                  </Link>
+                </TableCell>
+                <TableCell>{invoice.clientName}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {invoice.issueDate}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {invoice.dueDate}
+                </TableCell>
+                <TableCell className="text-right font-medium">
+                  {invoice.total}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={badgeVariant[invoice.visualState]}>
+                    {invoice.statusLabel}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableWrapper>
     </form>
   );
 }

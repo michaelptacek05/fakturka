@@ -18,8 +18,18 @@ export function getInvoiceAssetStorageRoot() {
 
 export function getInvoiceAssetAbsolutePath(storagePath: string) {
   const relativeStoragePath = storagePath.replace(/^storage[\\/]/, "");
+  const storageRoot = path.join(process.cwd(), "storage");
+  const absolutePath = path.resolve(storageRoot, relativeStoragePath);
 
-  return path.join(process.cwd(), "storage", relativeStoragePath);
+  // Cesty pochází z databáze, ale ven ze storage adresáře nikdy nesmí vést.
+  if (
+    absolutePath !== storageRoot &&
+    !absolutePath.startsWith(`${storageRoot}${path.sep}`)
+  ) {
+    throw new Error("Cesta k souboru vede mimo adresář storage.");
+  }
+
+  return absolutePath;
 }
 
 export function getInvoiceAssetExtension(mimeType: string) {

@@ -1,5 +1,7 @@
 "use client";
 
+import { Ban, Check } from "lucide-react";
+
 import { cancelInvoice, markInvoicePaid } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { InvoiceStatus } from "@/generated/prisma/enums";
@@ -20,26 +22,17 @@ export function InvoiceStatusActions({
   const isPaid = status === InvoiceStatus.PAID;
 
   return (
-    <div className="flex flex-wrap gap-2">
-      {isPaid ? (
-        <Button type="button" variant="outline" disabled>
-          Označeno jako zaplacené
-        </Button>
-      ) : isCancelled ? (
-        <Button type="button" variant="outline" disabled>
-          Nelze označit jako zaplacené
-        </Button>
-      ) : (
+    <>
+      {isPaid || isCancelled ? null : (
         <form action={markPaidAction}>
-          <Button type="submit">Označit jako zaplacené</Button>
+          <Button type="submit" variant="success" size="sm">
+            <Check className="size-4" aria-hidden="true" />
+            Označit jako zaplacené
+          </Button>
         </form>
       )}
 
-      {isCancelled ? (
-        <Button type="button" variant="outline" disabled>
-          Stornováno
-        </Button>
-      ) : (
+      {isCancelled ? null : (
         <form
           action={cancelAction}
           onSubmit={(event) => {
@@ -48,11 +41,12 @@ export function InvoiceStatusActions({
             }
           }}
         >
-          <Button type="submit" variant="destructive">
+          <Button type="submit" variant="outline" size="sm">
+            <Ban className="size-4" aria-hidden="true" />
             Stornovat
           </Button>
         </form>
       )}
-    </div>
+    </>
   );
 }

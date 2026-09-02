@@ -12,16 +12,14 @@ import {
 } from "@/lib/spayd";
 
 type PdfInvoice = {
-  client: {
-    city: string;
-    companyName: string | null;
-    country: string;
-    dic: string | null;
-    fullName: string | null;
-    ico: string | null;
-    postalCode: string;
-    street: string;
-  };
+  // Údaje odběratele jsou zamrzlé na faktuře, ne načtené z adresáře.
+  clientCity: string;
+  clientCountry: string;
+  clientDic: string | null;
+  clientIco: string | null;
+  clientName: string;
+  clientPostalCode: string;
+  clientStreet: string;
   constantSymbol: string | null;
   currency: string;
   dueDate: Date;
@@ -210,7 +208,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
 
   const pdf = collectPdf(document);
   const supplierName = invoice.profile.companyName || invoice.profile.displayName;
-  const clientName = invoice.client.companyName || invoice.client.fullName || "";
+  const clientName = invoice.clientName;
   const isVatPayer = invoice.profile.vatPayerStatus === VatPayerStatus.PAYER;
   const payment = validateBankProfile(invoice.profile);
   const logoPath = getPdfImagePath(invoice.profile.assets, InvoiceAssetType.LOGO);
@@ -282,11 +280,11 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
     document,
     [
       clientName,
-      invoice.client.street,
-      `${invoice.client.postalCode} ${invoice.client.city}`,
-      invoice.client.country,
-      invoice.client.ico ? `IČO: ${invoice.client.ico}` : null,
-      invoice.client.dic ? `DIČ: ${invoice.client.dic}` : null,
+      invoice.clientStreet,
+      `${invoice.clientPostalCode} ${invoice.clientCity}`,
+      invoice.clientCountry,
+      invoice.clientIco ? `IČO: ${invoice.clientIco}` : null,
+      invoice.clientDic ? `DIČ: ${invoice.clientDic}` : null,
     ],
     320,
     152,

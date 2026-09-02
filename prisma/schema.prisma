@@ -26,6 +26,30 @@ enum InvoiceAssetType {
   STAMP
 }
 
+enum ProjectStatus {
+  PLANNED
+  ACTIVE
+  ON_HOLD
+  DONE
+  CANCELLED
+}
+
+/// Sloupce nástěnky úkolů. Pořadí odpovídá pořadí sloupců zleva doprava.
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
 model UserProfile {
   id             String           @id @default(cuid())
   displayName    String
@@ -47,6 +71,7 @@ model UserProfile {
   assets         InvoiceAsset[]
   clients        Client[]
   invoices       Invoice[]
+  projects       Project[]
   sequences      InvoiceSequence[]
 }
 
@@ -68,6 +93,7 @@ model Client {
   updatedAt     DateTime      @updatedAt
   invoices      Invoice[]
   profile       UserProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  projects      Project[]
 
   @@index([profileId])
   @@index([ico])
@@ -79,6 +105,8 @@ model InvoiceSequence {
   name        String       @default("Výchozí")
   format      String       @default("YYYYMM###")
   nextNumber  Int          @default(1)
+  /// Období, ke kterému patří nextNumber. Při změně období se řada resetuje.
+  periodKey   String       @default("")
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
   invoices    Invoice[]
@@ -106,6 +134,16 @@ model Invoice {
   vatTotal          Decimal          @default(0) @db.Decimal(12, 2)
   total             Decimal          @default(0) @db.Decimal(12, 2)
   notes             String?
+  /// Snapshot odběratele v době vystavení. Doklad se nesmí měnit,
+  /// když se později upraví adresář odběratelů.
+  clientName        String           @default("")
+  clientStreet      String           @default("")
+  clientCity        String           @default("")
+  clientPostalCode  String           @default("")
+  clientCountry     String           @default("Česká republika")
+  clientIco         String?          @db.VarChar(16)
+  clientDic         String?          @db.VarChar(20)
+  clientEmail       String?
   qrPaymentPayload  String?
   pdfPath           String?
   createdAt         DateTime         @default(now())
@@ -149,4 +187,55 @@ model InvoiceAsset {
   profile     UserProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, type])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  profileId   String
+  /// Projekt může být i interní, proto je odběratel volitelný.
+  clientId    String?
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  priority    Priority      @default(MEDIUM)
+  startDate   DateTime?
+  dueDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  client      Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  profile     UserProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@index([profileId, status])
+  @@index([clientId])
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  status      TaskStatus @default(TODO)
+  priority    Priority   @default(MEDIUM)
+  /// Pořadí uvnitř sloupce nástěnky.
+  position    Int        @default(0)
+  dueDate     DateTime?
+  doneAt      DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  notes       TaskNote[]
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status, position])
+  @@index([status])
+}
+
+model TaskNote {
+  id        String   @id @default(cuid())
+  taskId    String
+  body      String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }

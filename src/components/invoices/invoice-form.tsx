@@ -1,10 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { CompanyLookup } from "@/components/ares/company-lookup";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Field, InputField, TextareaField } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 
 type InvoiceRow = {
   id: string;
@@ -45,31 +56,34 @@ type InvoiceFormProps = {
 };
 
 const dueDatePresets = [
-  { label: "Dnes", value: "0" },
-  { label: "Týden", value: "7" },
+  { label: "Ihned", value: "0" },
+  { label: "7 dní", value: "7" },
   { label: "10 dní", value: "10" },
   { label: "14 dní", value: "14" },
-  { label: "Měsíc", value: "30" },
-  { label: "Jiná...", value: "custom" },
+  { label: "30 dní", value: "30" },
+  { label: "Vlastní…", value: "custom" },
 ] as const;
+
 type DueDatePreset = (typeof dueDatePresets)[number]["value"];
 
-const inputClass =
-  "h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200";
-const labelClass = "grid gap-1.5 text-sm font-medium text-zinc-700";
+/** Běžné české sazby DPH pro rychlé nastavení položky. */
+const vatRatePresets = ["0", "12", "21"];
 
 function parseNumber(value: string) {
   const parsed = Number.parseFloat(value.replace(/\s/g, "").replace(",", "."));
+
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+const currencyFormatter = new Intl.NumberFormat("cs-CZ", {
+  currency: "CZK",
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+  style: "currency",
+});
+
 function formatCurrency(value: number) {
-  return new Intl.NumberFormat("cs-CZ", {
-    currency: "CZK",
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-    style: "currency",
-  }).format(value);
+  return currencyFormatter.format(value);
 }
 
 function parseDateInput(value: string) {
@@ -102,6 +116,7 @@ function addDaysToInputDate(value: string, days: number) {
   }
 
   date.setDate(date.getDate() + days);
+
   return formatDateInput(date);
 }
 
@@ -132,9 +147,18 @@ function createEmptyRow(): InvoiceRow {
     name: "",
     quantity: "1",
     unit: "ks",
-    unitPrice: "0",
-    vatRate: "0",
+    unitPrice: "",
+    vatRate: "21",
   };
+}
+
+function getRowTotal(row: InvoiceRow, isVatPayer: boolean) {
+  const subtotal =
+    Math.round(parseNumber(row.quantity) * parseNumber(row.unitPrice) * 100) /
+    100;
+  const vatRate = isVatPayer ? parseNumber(row.vatRate) : 0;
+
+  return subtotal + Math.round(subtotal * (vatRate / 100) * 100) / 100;
 }
 
 export function InvoiceForm({
@@ -148,6 +172,9 @@ export function InvoiceForm({
   readOnly = false,
   submitLabel = "Vystavit fakturu",
 }: InvoiceFormProps) {
+  // ID prvků musí být stejné na serveru i v prohlížeči, jinak React
+  // nahlásí neshodu při hydrataci. Náhodné row.id slouží jen jako React key.
+  const fieldPrefix = useId();
   const [rows, setRows] = useState<InvoiceRow[]>(() => {
     if (initialItems && initialItems.length > 0) {
       return initialItems.map((item) => ({
@@ -156,7 +183,7 @@ export function InvoiceForm({
       }));
     }
 
-    return [{ ...createEmptyRow(), name: "Konzultační služby", unitPrice: "1000" }];
+    return [createEmptyRow()];
   });
   const [issueDate, setIssueDate] = useState(defaultIssueDate);
   const [taxableSupplyDate, setTaxableSupplyDate] = useState(
@@ -183,24 +210,26 @@ export function InvoiceForm({
   };
   const isEditable = !readOnly;
 
-  const totals = useMemo(() => {
-    return rows.reduce(
-      (sum, row) => {
-        const quantity = parseNumber(row.quantity);
-        const unitPrice = parseNumber(row.unitPrice);
-        const vatRate = isVatPayer ? parseNumber(row.vatRate) : 0;
-        const subtotal = Math.round(quantity * unitPrice * 100) / 100;
-        const vat = Math.round(subtotal * (vatRate / 100) * 100) / 100;
+  const totals = useMemo(
+    () =>
+      rows.reduce(
+        (sum, row) => {
+          const quantity = parseNumber(row.quantity);
+          const unitPrice = parseNumber(row.unitPrice);
+          const vatRate = isVatPayer ? parseNumber(row.vatRate) : 0;
+          const subtotal = Math.round(quantity * unitPrice * 100) / 100;
+          const vat = Math.round(subtotal * (vatRate / 100) * 100) / 100;
 
-        return {
-          subtotal: sum.subtotal + subtotal,
-          total: sum.total + subtotal + vat,
-          vat: sum.vat + vat,
-        };
-      },
-      { subtotal: 0, total: 0, vat: 0 },
-    );
-  }, [isVatPayer, rows]);
+          return {
+            subtotal: sum.subtotal + subtotal,
+            total: sum.total + subtotal + vat,
+            vat: sum.vat + vat,
+          };
+        },
+        { subtotal: 0, total: 0, vat: 0 },
+      ),
+    [isVatPayer, rows],
+  );
 
   function updateRow(id: string, patch: Partial<InvoiceRow>) {
     setRows((currentRows) =>
@@ -225,80 +254,95 @@ export function InvoiceForm({
   }
 
   return (
-    <form action={action} className="grid gap-6">
-      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-4">
-        <label className={labelClass}>
-          Datum vystavení
-          <input
-            className={inputClass}
-            type="date"
-            name="issueDate"
-            value={issueDate}
-            onChange={(event) => {
-              const nextIssueDate = event.target.value;
+    <form action={action} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Termíny</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Field label="Datum vystavení" htmlFor="issueDate">
+              <Input
+                id="issueDate"
+                type="date"
+                name="issueDate"
+                value={issueDate}
+                onChange={(event) => {
+                  const nextIssueDate = event.target.value;
 
-              setIssueDate(nextIssueDate);
+                  setIssueDate(nextIssueDate);
 
-              if (dueDatePreset !== "custom") {
-                setDueDate(addDaysToInputDate(nextIssueDate, Number(dueDatePreset)));
-              }
-            }}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          DUZP
-          <input
-            className={inputClass}
-            type="date"
-            name="taxableSupplyDate"
-            value={taxableSupplyDate}
-            onChange={(event) => setTaxableSupplyDate(event.target.value)}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Splatnost za
-          <select
-            className={inputClass}
-            value={dueDatePreset}
-            onChange={(event) => {
-              const nextPreset = event.target.value as DueDatePreset;
+                  if (dueDatePreset !== "custom") {
+                    setDueDate(
+                      addDaysToInputDate(nextIssueDate, Number(dueDatePreset)),
+                    );
+                  }
+                }}
+                disabled={!isEditable}
+              />
+            </Field>
 
-              setDueDatePreset(nextPreset);
+            <Field
+              label="DUZP"
+              htmlFor="taxableSupplyDate"
+              hint="Datum zdanitelného plnění"
+            >
+              <Input
+                id="taxableSupplyDate"
+                type="date"
+                name="taxableSupplyDate"
+                value={taxableSupplyDate}
+                onChange={(event) => setTaxableSupplyDate(event.target.value)}
+                disabled={!isEditable}
+              />
+            </Field>
 
-              if (nextPreset !== "custom") {
-                setDueDate(addDaysToInputDate(issueDate, Number(nextPreset)));
-              }
-            }}
-            disabled={!isEditable}
-          >
-            {dueDatePresets.map((preset) => (
-              <option key={preset.value} value={preset.value}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={labelClass}>
-          Splatnost
-          <input
-            className={inputClass}
-            type="date"
-            name="dueDate"
-            value={dueDate}
-            onChange={(event) => updateDueDateFromInput(event.target.value)}
-            onInput={(event) =>
-              updateDueDateFromInput(event.currentTarget.value)
-            }
-            disabled={!isEditable}
-          />
-        </label>
-      </section>
+            <Field label="Splatnost za" htmlFor="dueDatePreset">
+              <Select
+                id="dueDatePreset"
+                value={dueDatePreset}
+                onChange={(event) => {
+                  const nextPreset = event.target.value as DueDatePreset;
 
-      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-2">
-        {isEditable ? (
-          <div className="md:col-span-2">
+                  setDueDatePreset(nextPreset);
+
+                  if (nextPreset !== "custom") {
+                    setDueDate(addDaysToInputDate(issueDate, Number(nextPreset)));
+                  }
+                }}
+                disabled={!isEditable}
+              >
+                {dueDatePresets.map((preset) => (
+                  <option key={preset.value} value={preset.value}>
+                    {preset.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field label="Datum splatnosti" htmlFor="dueDate">
+              <Input
+                id="dueDate"
+                type="date"
+                name="dueDate"
+                value={dueDate}
+                onChange={(event) => updateDueDateFromInput(event.target.value)}
+                disabled={!isEditable}
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Odběratel</CardTitle>
+          <CardDescription>
+            Údaje se uloží na fakturu i do adresáře odběratelů.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {isEditable ? (
             <CompanyLookup
               label="Vyhledat odběratele v ARES podle názvu firmy"
               fieldNames={{
@@ -311,259 +355,265 @@ export function InvoiceForm({
                 street: "clientStreet",
               }}
             />
+          ) : null}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <InputField
+              className="md:col-span-2"
+              label="Firma nebo jméno"
+              name="clientName"
+              required
+              placeholder="Název firmy nebo jméno odběratele"
+              defaultValue={values.clientName}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="Ulice a číslo"
+              name="clientStreet"
+              required
+              defaultValue={values.clientStreet}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="Město"
+              name="clientCity"
+              required
+              defaultValue={values.clientCity}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="PSČ"
+              name="clientPostalCode"
+              required
+              defaultValue={values.clientPostalCode}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="Země"
+              name="clientCountry"
+              defaultValue={values.clientCountry}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="IČO"
+              name="clientIco"
+              inputMode="numeric"
+              defaultValue={values.clientIco}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="DIČ"
+              name="clientDic"
+              defaultValue={values.clientDic}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="E-mail"
+              name="clientEmail"
+              type="email"
+              defaultValue={values.clientEmail}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="Telefon"
+              name="clientPhone"
+              defaultValue={values.clientPhone}
+              disabled={!isEditable}
+            />
           </div>
-        ) : null}
+        </CardContent>
+      </Card>
 
-        <label className={`${labelClass} md:col-span-2`}>
-          Odběratel - firma, která vám platí *
-          <input
-            className={inputClass}
-            name="clientName"
-            required
-            placeholder="Název firmy nebo jméno odběratele"
-            defaultValue={values.clientName}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Ulice a číslo *
-          <input
-            className={inputClass}
-            name="clientStreet"
-            required
-            defaultValue={values.clientStreet}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Město *
-          <input
-            className={inputClass}
-            name="clientCity"
-            required
-            defaultValue={values.clientCity}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          PSČ *
-          <input
-            className={inputClass}
-            name="clientPostalCode"
-            required
-            defaultValue={values.clientPostalCode}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Země
-          <input
-            className={inputClass}
-            name="clientCountry"
-            defaultValue={values.clientCountry}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          IČO
-          <input
-            className={inputClass}
-            name="clientIco"
-            inputMode="numeric"
-            defaultValue={values.clientIco}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          DIČ
-          <input
-            className={inputClass}
-            name="clientDic"
-            defaultValue={values.clientDic}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          E-mail
-          <input
-            className={inputClass}
-            name="clientEmail"
-            type="email"
-            defaultValue={values.clientEmail}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Telefon
-          <input
-            className={inputClass}
-            name="clientPhone"
-            defaultValue={values.clientPhone}
-            disabled={!isEditable}
-          />
-        </label>
-      </section>
-
-      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-base font-semibold">Položky faktury</h2>
-            <p className="text-sm text-zinc-500">
-              Přidejte služby nebo produkty účtované odběrateli.
-            </p>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle>Položky faktury</CardTitle>
+            <CardDescription>
+              Služby nebo produkty účtované odběrateli.
+            </CardDescription>
           </div>
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              if (!isEditable) {
-                return;
-              }
-
-              setRows((currentRows) => [...currentRows, createEmptyRow()]);
-            }}
+            size="sm"
+            onClick={() =>
+              setRows((currentRows) => [...currentRows, createEmptyRow()])
+            }
             disabled={!isEditable}
           >
             <Plus className="size-4" aria-hidden="true" />
             Přidat položku
           </Button>
-        </div>
+        </CardHeader>
 
-        <div className="grid gap-3">
-          {rows.map((row, index) => (
-            <div
-              className="grid gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 lg:grid-cols-[1.5fr_100px_90px_140px_110px_44px]"
-              key={row.id}
-            >
-              <label className={labelClass}>
-                Název *
-                <input
-                  className={inputClass}
-                  name="itemName"
-                  required
-                  value={row.name}
-                  onChange={(event) => updateRow(row.id, { name: event.target.value })}
-                  disabled={!isEditable}
-                />
-              </label>
-              <label className={labelClass}>
-                Množství *
-                <input
-                  className={inputClass}
-                  name="quantity"
-                  required
-                  inputMode="decimal"
-                  value={row.quantity}
-                  onChange={(event) =>
-                    updateRow(row.id, { quantity: event.target.value })
-                  }
-                  disabled={!isEditable}
-                />
-              </label>
-              <label className={labelClass}>
-                Jednotka
-                <input
-                  className={inputClass}
-                  name="unit"
-                  value={row.unit}
-                  onChange={(event) => updateRow(row.id, { unit: event.target.value })}
-                  disabled={!isEditable}
-                />
-              </label>
-              <label className={labelClass}>
-                Cena / j. *
-                <input
-                  className={inputClass}
-                  name="unitPrice"
-                  required
-                  inputMode="decimal"
-                  value={row.unitPrice}
-                  onChange={(event) =>
-                    updateRow(row.id, { unitPrice: event.target.value })
-                  }
-                  disabled={!isEditable}
-                />
-              </label>
-              <label className={labelClass}>
-                DPH %
-                <input
-                  className={inputClass}
-                  name="vatRate"
-                  inputMode="decimal"
-                  disabled={!isVatPayer || !isEditable}
-                  value={isVatPayer ? row.vatRate : "0"}
-                  onChange={(event) =>
-                    updateRow(row.id, { vatRate: event.target.value })
-                  }
-                />
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="self-end"
-                onClick={() => removeRow(row.id)}
-                disabled={!isEditable || rows.length === 1}
-                aria-label={`Odebrat položku ${index + 1}`}
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            {rows.map((row, index) => (
+              <div
+                className="rounded-lg border border-border bg-muted/40 p-3"
+                key={row.id}
               >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </Button>
+                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_110px_auto]">
+                  <Field label="Název" htmlFor={`${fieldPrefix}-name-${index}`} required>
+                    <Input
+                      id={`${fieldPrefix}-name-${index}`}
+                      name="itemName"
+                      required
+                      placeholder="Např. Konzultace, vývoj, hosting"
+                      value={row.name}
+                      onChange={(event) =>
+                        updateRow(row.id, { name: event.target.value })
+                      }
+                      disabled={!isEditable}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Množství"
+                    htmlFor={`${fieldPrefix}-quantity-${index}`}
+                    required
+                  >
+                    <Input
+                      id={`${fieldPrefix}-quantity-${index}`}
+                      name="quantity"
+                      required
+                      inputMode="decimal"
+                      value={row.quantity}
+                      onChange={(event) =>
+                        updateRow(row.id, { quantity: event.target.value })
+                      }
+                      disabled={!isEditable}
+                    />
+                  </Field>
+
+                  <Field label="Jednotka" htmlFor={`${fieldPrefix}-unit-${index}`}>
+                    <Input
+                      id={`${fieldPrefix}-unit-${index}`}
+                      name="unit"
+                      value={row.unit}
+                      onChange={(event) =>
+                        updateRow(row.id, { unit: event.target.value })
+                      }
+                      disabled={!isEditable}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Cena / j."
+                    htmlFor={`${fieldPrefix}-price-${index}`}
+                    required
+                  >
+                    <Input
+                      id={`${fieldPrefix}-price-${index}`}
+                      name="unitPrice"
+                      required
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={row.unitPrice}
+                      onChange={(event) =>
+                        updateRow(row.id, { unitPrice: event.target.value })
+                      }
+                      disabled={!isEditable}
+                    />
+                  </Field>
+
+                  <Field label="DPH %" htmlFor={`${fieldPrefix}-vat-${index}`}>
+                    <Select
+                      id={`${fieldPrefix}-vat-${index}`}
+                      name="vatRate"
+                      disabled={!isVatPayer || !isEditable}
+                      value={isVatPayer ? row.vatRate : "0"}
+                      onChange={(event) =>
+                        updateRow(row.id, { vatRate: event.target.value })
+                      }
+                    >
+                      {vatRatePresets.map((rate) => (
+                        <option key={rate} value={rate}>
+                          {rate} %
+                        </option>
+                      ))}
+                      {vatRatePresets.includes(row.vatRate) ? null : (
+                        <option value={row.vatRate}>{row.vatRate} %</option>
+                      )}
+                    </Select>
+                  </Field>
+
+                  <div className="flex items-end justify-end pb-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeRow(row.id)}
+                      disabled={!isEditable || rows.length === 1}
+                      aria-label={`Odebrat položku ${index + 1}`}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </div>
+
+                <p className="mt-2 text-right text-xs text-muted-foreground">
+                  Řádek celkem:{" "}
+                  <span className="font-medium text-foreground">
+                    {formatCurrency(getRowTotal(row, isVatPayer))}
+                  </span>
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="ml-auto w-full max-w-sm space-y-2 rounded-lg border border-border bg-muted/60 p-4 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Mezisoučet</span>
+              <strong>{formatCurrency(totals.subtotal)}</strong>
             </div>
-          ))}
-        </div>
-
-        <div className="ml-auto grid w-full max-w-sm gap-2 rounded-lg bg-zinc-100 p-4 text-sm">
-          <div className="flex justify-between">
-            <span>Mezisoučet</span>
-            <strong>{formatCurrency(totals.subtotal)}</strong>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">DPH</span>
+              <strong>{formatCurrency(totals.vat)}</strong>
+            </div>
+            <div className="flex justify-between border-t border-border pt-2 text-base">
+              <span>Celkem</span>
+              <strong>{formatCurrency(totals.total)}</strong>
+            </div>
           </div>
-          <div className="flex justify-between">
-            <span>DPH</span>
-            <strong>{formatCurrency(totals.vat)}</strong>
-          </div>
-          <div className="flex justify-between border-t border-zinc-300 pt-2 text-base">
-            <span>Celkem</span>
-            <strong>{formatCurrency(totals.total)}</strong>
-          </div>
-        </div>
-      </section>
+        </CardContent>
+      </Card>
 
-      <section className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-3">
-        <label className={labelClass}>
-          Konstantní symbol
-          <input
-            className={inputClass}
-            name="constantSymbol"
-            defaultValue={values.constantSymbol}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={labelClass}>
-          Specifický symbol
-          <input
-            className={inputClass}
-            name="specificSymbol"
-            defaultValue={values.specificSymbol}
-            disabled={!isEditable}
-          />
-        </label>
-        <label className={`${labelClass} md:col-span-3`}>
-          Poznámka
-          <textarea
-            className="min-h-24 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200"
-            name="notes"
-            placeholder="Např. Fakturujeme vám dle domluvy..."
-            defaultValue={values.notes}
-            disabled={!isEditable}
-          />
-        </label>
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle>Doplňující údaje</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <InputField
+              label="Konstantní symbol"
+              name="constantSymbol"
+              defaultValue={values.constantSymbol}
+              disabled={!isEditable}
+            />
+            <InputField
+              label="Specifický symbol"
+              name="specificSymbol"
+              defaultValue={values.specificSymbol}
+              disabled={!isEditable}
+            />
+            <TextareaField
+              className="md:col-span-2"
+              label="Poznámka"
+              name="notes"
+              placeholder="Např. Fakturujeme vám dle domluvy…"
+              defaultValue={values.notes}
+              disabled={!isEditable}
+            />
+          </div>
+        </CardContent>
 
-      {isEditable ? (
-        <div className="flex justify-end">
-          <Button type="submit">{submitLabel}</Button>
-        </div>
-      ) : null}
+        {isEditable ? (
+          <CardFooter className="justify-end">
+            <Button type="submit">{submitLabel}</Button>
+          </CardFooter>
+        ) : null}
+      </Card>
     </form>
   );
 }

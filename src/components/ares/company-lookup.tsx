@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useId, useState } from "react";
+import { Loader2, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type CompanyResult = {
   city: string;
@@ -28,9 +30,6 @@ type FieldNames = {
 
 type SearchState = "idle" | "loading" | "ready" | "error";
 
-const inputClass =
-  "h-10 rounded-lg border border-zinc-300 bg-white px-3 text-sm outline-none transition-colors focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200";
-
 function setFieldValue(name: string, value: string) {
   const field = document.querySelector<HTMLInputElement | HTMLSelectElement>(
     `[name="${name}"]`,
@@ -54,9 +53,12 @@ export function CompanyLookup({
   label?: string;
   searchType?: "name" | "ico";
 }) {
+  const inputId = useId();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CompanyResult[]>([]);
   const [state, setState] = useState<SearchState>("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   const resolvedLabel =
     label ??
     (searchType === "ico"
@@ -69,13 +71,16 @@ export function CompanyLookup({
     const trimmedQuery = query.trim();
     const normalizedIco = trimmedQuery.replace(/\D/g, "");
 
-    if (searchType === "ico" ? normalizedIco.length < 8 : trimmedQuery.length < 2) {
+    if (
+      searchType === "ico" ? normalizedIco.length < 8 : trimmedQuery.length < 2
+    ) {
       setResults([]);
       setState("idle");
       return;
     }
 
     setState("loading");
+    setErrorMessage(null);
 
     try {
       const response = await fetch(
@@ -84,15 +89,25 @@ export function CompanyLookup({
           : `/api/ares/search?q=${encodeURIComponent(trimmedQuery)}`,
       );
 
+      const data = (await response.json()) as {
+        error?: string;
+        results?: CompanyResult[];
+      };
+
       if (!response.ok) {
-        throw new Error("ARES request failed");
+        // Endpoint vrací srozumitelnou hlášku pro timeout i pro rate limit.
+        throw new Error(data.error ?? "ARES request failed");
       }
 
-      const data = (await response.json()) as { results: CompanyResult[] };
-      setResults(data.results);
+      setResults(data.results ?? []);
       setState("ready");
-    } catch {
+    } catch (error) {
       setResults([]);
+      setErrorMessage(
+        error instanceof Error && error.message !== "ARES request failed"
+          ? error.message
+          : "ARES teď neodpovídá. Údaje můžete vyplnit ručně.",
+      );
       setState("error");
     }
   }
@@ -111,15 +126,12 @@ export function CompanyLookup({
   }
 
   return (
-    <section className="grid gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-      <div className="grid gap-1.5">
-        <label className="text-sm font-medium text-zinc-700" htmlFor="ares-query">
-          {resolvedLabel}
-        </label>
+    <section className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
+      <div className="space-y-1.5">
+        <Label htmlFor={inputId}>{resolvedLabel}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <input
-            className={inputClass}
-            id="ares-query"
+          <Input
+            id={inputId}
             inputMode={searchType === "ico" ? "numeric" : "text"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -131,49 +143,52 @@ export function CompanyLookup({
             }}
             placeholder={placeholder}
           />
-          <Button type="button" variant="outline" onClick={searchCompanies}>
-            <Search className="size-4" aria-hidden="true" />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={searchCompanies}
+            disabled={state === "loading"}
+          >
+            {state === "loading" ? (
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Search className="size-4" aria-hidden="true" />
+            )}
             Vyhledat
           </Button>
         </div>
       </div>
 
-      {state === "error" ? (
-        <p className="text-sm text-red-700">
-          ARES teď neodpovídá. Údaje můžete vyplnit ručně.
-        </p>
+      {state === "error" && errorMessage ? (
+        <p className="text-sm text-destructive">{errorMessage}</p>
       ) : null}
 
       {state === "ready" && results.length === 0 ? (
-        <p className="text-sm text-zinc-500">Nic jsem nenašel.</p>
+        <p className="text-sm text-muted-foreground">Nic jsem nenašel.</p>
       ) : null}
 
       {results.length > 0 ? (
-        <div className="grid gap-2">
+        <ul className="space-y-2">
           {results.map((company) => (
-            <button
-              className="rounded-lg border border-zinc-200 bg-white p-3 text-left text-sm transition-colors hover:bg-zinc-100"
-              key={company.ico}
-              type="button"
-              onClick={() => selectCompany(company)}
-            >
-              <span className="block font-medium text-zinc-950">
-                {company.name}
-              </span>
-              <span className="mt-1 block text-zinc-500">
-                IČO {company.ico}
-                {company.dic ? `, DIČ ${company.dic}` : ""}
-              </span>
-              <span className="mt-1 block text-zinc-500">
-                {company.textAddress || [company.street, company.city].filter(Boolean).join(", ")}
-              </span>
-            </button>
+            <li key={company.ico}>
+              <button
+                className="w-full rounded-lg border border-border bg-background p-3 text-left text-sm transition-colors outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/45"
+                type="button"
+                onClick={() => selectCompany(company)}
+              >
+                <span className="block font-medium">{company.name}</span>
+                <span className="mt-1 block text-muted-foreground">
+                  IČO {company.ico}
+                  {company.dic ? `, DIČ ${company.dic}` : ""}
+                </span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  {company.textAddress ||
+                    [company.street, company.city].filter(Boolean).join(", ")}
+                </span>
+              </button>
+            </li>
           ))}
-        </div>
-      ) : null}
-
-      {state === "loading" ? (
-        <p className="text-sm text-zinc-500">Hledám v ARES...</p>
+        </ul>
       ) : null}
     </section>
   );

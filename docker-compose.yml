@@ -1,3 +1,9 @@
+# Produkční stack pro Portainer za nginx proxy managerem.
+# Pro lokální vývoj použijte docker-compose.dev.yml.
+#
+# Vyžaduje existující externí síť nginx-proxy-manager_default.
+# Pokud ji nemáte, vytvořte ji: docker network create nginx-proxy-manager_default
+
 services:
   db:
     image: postgres:16-alpine
@@ -5,26 +11,29 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-fakturka}
       POSTGRES_USER: ${POSTGRES_USER:-fakturka}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD musi byt nastaveno}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-fakturka} -d $${POSTGRES_DB:-fakturka}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - internal
 
   migrate:
-    image: ghcr.io/michaelptacek05/fakturka:latest
+    image: ghcr.io/michaelptacek05/fakturka:migrate
     depends_on:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
-    command: ["npm", "run", "prisma:deploy"]
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
     restart: "no"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
       - internal
 
@@ -37,10 +46,20 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?AUTH_PASSWORD musi byt nastaveno}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET musi byt nastaveno}
+    # Publikovaný port slouží k ladění z hostitele. Nginx proxy manager
+    # se k aplikaci připojuje po síti nginx-proxy-manager_default na host "app", port 3000.
+    # Pro přímé vystavení na veřejné rozhraní nastavte APP_BIND=0.0.0.0.
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${APP_PORT:-3000}:3000"
     volumes:
       - invoice_storage:/app/storage
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     networks:
       - internal
       - nginx-proxy-manager_default

@@ -17,6 +17,13 @@ import {
   toDate,
 } from "@/lib/format";
 import {
+  buildInvoiceNumber,
+  buildVariableSymbol,
+  DEFAULT_INVOICE_NUMBER_FORMAT,
+  getInvoicePeriodKey,
+  normalizeInvoiceNumberFormat,
+} from "@/lib/invoice-number";
+import {
   getInvoiceAssetExtension,
   getInvoiceAssetStorageRoot,
   INVOICE_ASSET_MIME_TYPES,
@@ -41,12 +48,23 @@ import {
   ValidationError,
 } from "@/lib/validation";
 
-function buildInvoiceNumber(issueDate: Date, nextNumber: number) {
-  const year = issueDate.getFullYear();
-  const month = String(issueDate.getMonth() + 1).padStart(2, "0");
-  const serial = String(nextNumber).padStart(3, "0");
+type ClientData = ReturnType<typeof buildClientData>;
 
-  return `${year}${month}${serial}`;
+/**
+ * Údaje odběratele zamrzlé na faktuře. Vystavený doklad musí zůstat stejný
+ * i poté, co se odběratel v adresáři přejmenuje nebo přestěhuje.
+ */
+function buildClientSnapshot(clientData: ClientData) {
+  return {
+    clientCity: clientData.city,
+    clientCountry: clientData.country,
+    clientDic: clientData.dic,
+    clientEmail: clientData.email,
+    clientIco: clientData.ico,
+    clientName: clientData.companyName ?? clientData.fullName ?? "",
+    clientPostalCode: clientData.postalCode,
+    clientStreet: clientData.street,
+  };
 }
 
 function buildClientData(formData: FormData) {
@@ -174,8 +192,12 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
 
 export async function upsertProfile(formData: FormData) {
   let data;
+  let invoiceNumberFormat = DEFAULT_INVOICE_NUMBER_FORMAT;
 
   try {
+    invoiceNumberFormat = normalizeInvoiceNumberFormat(
+      getOptionalFormString(formData, "invoiceNumberFormat"),
+    );
     const displayName = getRequiredFormString(formData, "displayName");
     const street = getRequiredFormString(formData, "street");
     const city = getRequiredFormString(formData, "city");
@@ -219,13 +241,35 @@ export async function upsertProfile(formData: FormData) {
       select: { id: true },
     });
 
-    if (profile) {
-      await prisma.userProfile.update({
-        data,
-        where: { id: profile.id },
+    const savedProfile = profile
+      ? await prisma.userProfile.update({
+          data,
+          select: { id: true },
+          where: { id: profile.id },
+        })
+      : await prisma.userProfile.create({ data, select: { id: true } });
+
+    // Formát čísla faktury žije na číselné řadě, ne na profilu.
+    const sequence = await prisma.invoiceSequence.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { format: true, id: true },
+      where: { profileId: savedProfile.id },
+    });
+
+    if (!sequence) {
+      await prisma.invoiceSequence.create({
+        data: {
+          format: invoiceNumberFormat,
+          profileId: savedProfile.id,
+        },
       });
-    } else {
-      await prisma.userProfile.create({ data });
+    } else if (sequence.format !== invoiceNumberFormat) {
+      // periodKey necháváme být — při změně formátu se období neshodne
+      // a další faktura správně začne novou řadu od jedničky.
+      await prisma.invoiceSequence.update({
+        data: { format: invoiceNumberFormat },
+        where: { id: sequence.id },
+      });
     }
   } catch {
     redirect("/settings/profile?error=db");
@@ -267,12 +311,19 @@ export async function createInvoice(formData: FormData) {
 
   try {
     invoiceId = await prisma.$transaction(async (tx) => {
+      // Zámek na číselné řadě, aby dvě souběžná uložení nedostala stejné číslo.
+      await tx.$queryRaw`SELECT "id" FROM "InvoiceSequence" WHERE "profileId" = ${profile.id} FOR UPDATE`;
+
       const sequence = await tx.invoiceSequence.findFirst({
         orderBy: { createdAt: "asc" },
         where: { profileId: profile.id },
       });
-      const nextNumber = sequence?.nextNumber ?? 1;
-      const number = buildInvoiceNumber(invoiceData.issueDate, nextNumber);
+      const format = sequence?.format ?? DEFAULT_INVOICE_NUMBER_FORMAT;
+      const periodKey = getInvoicePeriodKey(format, invoiceData.issueDate);
+      // Nové období (jiný měsíc nebo rok) začíná pořadím od jedničky.
+      const nextNumber =
+        sequence && sequence.periodKey === periodKey ? sequence.nextNumber : 1;
+      const number = buildInvoiceNumber(format, invoiceData.issueDate, nextNumber);
 
       const client =
         invoiceData.clientLookup.length > 0
@@ -298,20 +349,22 @@ export async function createInvoice(formData: FormData) {
 
       const savedSequence = sequence
         ? await tx.invoiceSequence.update({
-            data: { nextNumber: { increment: 1 } },
+            data: { nextNumber: nextNumber + 1, periodKey },
             where: { id: sequence.id },
           })
         : await tx.invoiceSequence.create({
             data: {
-              format: "YYYYMM###",
+              format,
               name: "Výchozí",
               nextNumber: nextNumber + 1,
+              periodKey,
               profileId: profile.id,
             },
           });
 
       const invoice = await tx.invoice.create({
         data: {
+          ...buildClientSnapshot(invoiceData.clientData),
           clientId: savedClient.id,
           constantSymbol: getOptionalFormString(formData, "constantSymbol"),
           currency: "CZK",
@@ -339,7 +392,7 @@ export async function createInvoice(formData: FormData) {
           subtotal: decimalFromCents(invoiceData.subtotalCents),
           taxableSupplyDate: invoiceData.taxableSupplyDate,
           total: decimalFromCents(invoiceData.totalCents),
-          variableSymbol: number.replace(/\D/g, ""),
+          variableSymbol: buildVariableSymbol(number),
           vatTotal: decimalFromCents(invoiceData.vatTotalCents),
         },
         select: { id: true },
@@ -404,17 +457,15 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.client.update({
-        data: invoiceData.clientData,
-        where: { id: invoice.clientId },
-      });
-
+      // Záměrně needitujeme záznam odběratele v adresáři — úprava jedné
+      // faktury nesmí přepsat údaje na ostatních dokladech.
       await tx.invoiceItem.deleteMany({
         where: { invoiceId },
       });
 
       await tx.invoice.update({
         data: {
+          ...buildClientSnapshot(invoiceData.clientData),
           constantSymbol: getOptionalFormString(formData, "constantSymbol"),
           dueDate: invoiceData.dueDate,
           issueDate: invoiceData.issueDate,

@@ -10,10 +10,8 @@ const HEALTH_ASSESSMENT_RATE = 0.5;
 const HEALTH_INSURANCE_RATE = 0.135;
 
 type DashboardInvoice = {
-  client: {
-    companyName: string | null;
-    fullName: string | null;
-  };
+  /** Snapshot odběratele z faktury, ne aktuální stav adresáře. */
+  clientName: string;
   dueDate: Date;
   id: string;
   issueDate: Date;
@@ -135,7 +133,7 @@ export function buildDashboardData(invoices: DashboardInvoice[], today = new Dat
     .sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime())
     .slice(0, 5)
     .map((invoice) => ({
-      clientName: invoice.client.companyName ?? invoice.client.fullName ?? "-",
+      clientName: invoice.clientName || "—",
       dueDate: invoice.dueDate,
       id: invoice.id,
       number: invoice.number,

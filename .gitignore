@@ -28,6 +28,7 @@
 .idea/
 AGENTS.md
 CLAUDE.md
+.claude/
 
 # debug
 npm-debug.log*

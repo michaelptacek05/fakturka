@@ -96,22 +96,23 @@ export async function PaymentQr({
           </div>
         </dl>
         {!hasValidDomesticAccount ? (
-          <p className="font-medium text-amber-700">
+          <p className="font-medium text-amber-700 print-hidden">
             Zkontrolujte číslo účtu a kód banky v profilu.
           </p>
         ) : null}
         {bankValidation.issues.map((issue) => (
-          <p className="font-medium text-amber-700" key={issue}>
+          <p className="font-medium text-amber-700 print-hidden" key={issue}>
             {issue}
           </p>
         ))}
         {bankValidation.warnings.map((warning) => (
-          <p className="font-medium text-amber-700" key={warning}>
+          <p className="font-medium text-amber-700 print-hidden" key={warning}>
             {warning}
           </p>
         ))}
+        {/* Ladicí výpis payloadu je jen pro obrazovku, na tisk nepatří. */}
         <p
-          className="mt-1 max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] leading-4 text-zinc-500 print:max-w-[190px] print:text-[7px]"
+          className="print-hidden mt-1 max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] leading-4 text-zinc-400"
           title={payload}
         >
           {payload}

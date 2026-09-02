@@ -49,6 +49,33 @@ function normalizeStreet(address?: AresAddress) {
   return address.textovaAdresa ?? "";
 }
 
+const ARES_ENDPOINT =
+  "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/vyhledat";
+const ARES_TIMEOUT_MS = 8000;
+
+/**
+ * Jednoduché okno v paměti procesu. ARES je veřejná služba a endpoint je
+ * dostupný komukoli přihlášenému, takže si hlídáme, ať ho nezahltíme.
+ */
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 60;
+
+let windowStartedAt = 0;
+let requestsInWindow = 0;
+
+function isRateLimited() {
+  const now = Date.now();
+
+  if (now - windowStartedAt > RATE_LIMIT_WINDOW_MS) {
+    windowStartedAt = now;
+    requestsInWindow = 0;
+  }
+
+  requestsInWindow += 1;
+
+  return requestsInWindow > RATE_LIMIT_MAX_REQUESTS;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
@@ -64,9 +91,17 @@ export async function GET(request: Request) {
     return NextResponse.json({ results: [] });
   }
 
-  const response = await fetch(
-    "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/vyhledat",
-    {
+  if (isRateLimited()) {
+    return NextResponse.json(
+      { error: "Příliš mnoho dotazů na ARES. Zkuste to za chvíli." },
+      { status: 429 },
+    );
+  }
+
+  let data: AresSearchResponse;
+
+  try {
+    const response = await fetch(ARES_ENDPOINT, {
       body: JSON.stringify(
         isIcoSearch
           ? {
@@ -86,17 +121,30 @@ export async function GET(request: Request) {
         "Content-Type": "application/json",
       },
       method: "POST",
-    },
-  );
+      signal: AbortSignal.timeout(ARES_TIMEOUT_MS),
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "ARES vyhledávání není momentálně dostupné." },
+        { status: 502 },
+      );
+    }
+
+    data = (await response.json()) as AresSearchResponse;
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "TimeoutError";
+
     return NextResponse.json(
-      { error: "ARES vyhledávání není momentálně dostupné." },
-      { status: 502 },
+      {
+        error: isTimeout
+          ? "ARES neodpověděl včas. Zkuste to prosím znovu."
+          : "ARES vyhledávání není momentálně dostupné.",
+      },
+      { status: 504 },
     );
   }
 
-  const data = (await response.json()) as AresSearchResponse;
   const results =
     data.ekonomickeSubjekty?.map((subject) => {
       const address = subject.sidlo;
