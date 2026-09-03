@@ -13,7 +13,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-fakturka}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD musi byt nastaveno}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-fakturka} -d $${POSTGRES_DB:-fakturka}"]
+      # -h vynutí kontrolu přes TCP. Bez něj pg_isready uspěje už během
+      # initdb, kdy server poslouchá jen na unixovém socketu — databáze se
+      # označí jako healthy, migrate se rozjede a narazí na restartující
+      # se server, případně na ještě nenastavené heslo.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER:-fakturka} -d $${POSTGRES_DB:-fakturka}"]
       interval: 10s
       timeout: 5s
       retries: 5
