@@ -24,6 +24,8 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
 - `Project`: zakázka pod odběratelem, stav, priorita, termíny a popis.
 - `Task`: úkol pod projektem, stav odpovídá sloupci nástěnky, priorita a ruční pořadí.
 - `TaskNote`: časované poznámky k úkolu.
+- `UserProfile` nese i nastavení odvodů: režim činnosti, paušál, sleva na
+  poplatníka a rozhodná částka.
 
 ## Fáze a stav
 
@@ -201,6 +203,18 @@ Self-hosted webová aplikace pro správu a generování faktur pro české OSVČ
   - Z hlavičky zmizela Nová faktura, zůstává na dashboardu a v agendě faktur.
   - Seed doplněn o demo projekty, úkoly a poznámky.
   - Seed nově ukládá časy v UTC, aby seděly s tím, co zapisuje aplikace.
+
+- Fáze 16: Odhad daně a odvodů
+  - Výpočet vytažen z `dashboard.ts` do samostatného `src/lib/tax-estimate.ts`
+    jako čistá funkce, pokrytá testy.
+  - Přidán režim vedlejší činnosti: pod rozhodnou částkou se sociální neplatí.
+  - Doplněna sleva na poplatníka, dřív se ukazovala jen daň před slevami.
+  - Paušální výdaje volitelně 40, 60 nebo 80 % včetně správného stropu.
+  - Karta na dashboardu vede jedním číslem k doplacení a u každé položky
+    vysvětluje, proč vyšla zrovna tak.
+  - U vedlejší činnosti ukazuje, kolik zisku zbývá do rozhodné částky.
+  - Částky, které se mění každý rok, jsou v nastavení profilu, ne v kódu —
+    zdroje se u nich rozcházejí a aplikace nemá tvrdit, co neví.
 
 ## Technické poznámky
 

@@ -23,7 +23,8 @@ Tento projekt je vibe coded. Vzniká iterativně s pomocí AI asistenta, s důra
 - QR platba ve formátu SPAYD.
 - Server-side PDF export faktury.
 - Logo, podpis a razítko na webové faktuře i v PDF.
-- Dashboard příjmů, nezaplacených faktur, DPH limitu a orientačních odvodů.
+- Dashboard příjmů, nezaplacených faktur a DPH limitu.
+- Odhad daně a odvodů s režimem hlavní i vedlejší činnosti (student).
 - Světlý i tmavý motiv.
 
 ## Technologie
@@ -190,6 +191,33 @@ projekt a prioritu), jednak na detailu projektu, kde ukazuje jen jeho úkoly.
 nejnovější — hodí se na průběh práce, domluvy s klientem nebo co ještě zbývá.
 Počet poznámek je vidět i na kartě na nástěnce.
 
+## Odhad daně a odvodů
+
+Dashboard ukazuje orientační odhad toho, co se doplácí po podání přiznání
+a přehledů. Vychází ze zaplacených faktur v aktuálním kalendářním roce.
+
+V **Nastavení → Odvody a daně** se nastavuje:
+
+- **Režim činnosti** — hlavní, nebo vedlejší. Vedlejší platí pro studenty,
+  zaměstnance, rodiče na rodičovské a důchodce.
+- **Paušální výdaje** — 40, 60 nebo 80 % včetně příslušného stropu.
+- **Sleva na poplatníka** a jestli se uplatňuje.
+- **Rozhodná částka** pro účast na důchodovém pojištění.
+
+U vedlejší činnosti se sociální pojistné neplatí, dokud zisk nepřekročí
+rozhodnou částku — karta pak ukazuje, kolik do ní ještě zbývá. Zdravotní se
+u státních pojištěnců počítá ze skutečného zisku bez minimálního základu.
+U každé položky je vysvětlivka, proč vyšla zrovna tak.
+
+Sazby daně a pojistného jsou konstanty v [tax-estimate.ts](src/lib/tax-estimate.ts).
+Částky, které se mění každý rok, jsou naopak v nastavení, aby se daly opravit
+bez zásahu do kódu.
+
+Odhad je zjednodušený: nepočítá minimální zálohy u hlavní činnosti, zvýšenou
+sazbu daně 23 %, ani jiné slevy než na poplatníka. **Nenahrazuje účetní ani
+daňové poradenství** — aktuální sazby si ověřte na ČSSZ a u své zdravotní
+pojišťovny.
+
 ## Číslování faktur
 
 Formát se nastavuje v **Nastavení → Číslování faktur**. Zástupné znaky:
@@ -238,8 +266,8 @@ o den podle časové zóny hostitele.
 ## Testy
 
 Testy pokrývají čistou logiku bez databáze — číslování faktur, parsování CSV,
-mapování importu z Fakturoidu, řazení úkolů na nástěnce a validace IČO, DIČ,
-účtu, IBANu a částek.
+mapování importu z Fakturoidu, řazení úkolů na nástěnce, odhad daně a odvodů
+a validace IČO, DIČ, účtu, IBANu a částek.
 
 ```bash
 npm test

@@ -1,13 +1,16 @@
-import { InvoiceStatus } from "@/generated/prisma/enums";
+import { ActivityType, InvoiceStatus } from "@/generated/prisma/enums";
+import { estimateTaxes, type TaxSettings } from "@/lib/tax-estimate";
+
+/** Když profil ještě neexistuje, počítáme jako hlavní činnost bez slev. */
+const DEFAULT_TAX_SETTINGS: TaxSettings = {
+  activityType: ActivityType.MAIN,
+  applyTaxpayerCredit: false,
+  flatExpenseRate: 60,
+  socialThreshold: 117_521,
+  taxpayerCredit: 30_840,
+};
 
 const VAT_LIMIT_CZK = 2_000_000;
-const FLAT_EXPENSE_RATE = 0.6;
-const FLAT_EXPENSE_CAP = 1_200_000;
-const INCOME_TAX_RATE = 0.15;
-const SOCIAL_ASSESSMENT_RATE = 0.55;
-const SOCIAL_INSURANCE_RATE = 0.292;
-const HEALTH_ASSESSMENT_RATE = 0.5;
-const HEALTH_INSURANCE_RATE = 0.135;
 
 type DashboardInvoice = {
   /** Snapshot odběratele z faktury, ne aktuální stav adresáře. */
@@ -69,7 +72,11 @@ function getRevenueDate(invoice: DashboardInvoice) {
   return invoice.taxableSupplyDate ?? invoice.issueDate;
 }
 
-export function buildDashboardData(invoices: DashboardInvoice[], today = new Date()) {
+export function buildDashboardData(
+  invoices: DashboardInvoice[],
+  today = new Date(),
+  taxSettings: TaxSettings = DEFAULT_TAX_SETTINGS,
+) {
   const todayStart = startOfDay(today);
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);
@@ -120,13 +127,7 @@ export function buildDashboardData(invoices: DashboardInvoice[], today = new Dat
   });
   const maxMonthlyRevenue = Math.max(...monthlyRevenue.map((item) => item.total), 0);
   const annualPaidRevenue = sumInvoices(paidThisYear);
-  const flatExpenses = Math.min(
-    annualPaidRevenue * FLAT_EXPENSE_RATE,
-    FLAT_EXPENSE_CAP,
-  );
-  const taxBase = Math.max(annualPaidRevenue - flatExpenses, 0);
-  const socialAssessmentBase = taxBase * SOCIAL_ASSESSMENT_RATE;
-  const healthAssessmentBase = taxBase * HEALTH_ASSESSMENT_RATE;
+  const estimate = estimateTaxes(annualPaidRevenue, taxSettings);
   const vatLimitRevenue = sumInvoices(vatLimitInvoices);
   const recentInvoices = invoices
     .slice()
@@ -142,16 +143,7 @@ export function buildDashboardData(invoices: DashboardInvoice[], today = new Dat
     }));
 
   return {
-    estimate: {
-      flatExpenses,
-      healthAssessmentBase,
-      healthInsurance: healthAssessmentBase * HEALTH_INSURANCE_RATE,
-      incomeTaxBeforeCredits: taxBase * INCOME_TAX_RATE,
-      paidRevenue: annualPaidRevenue,
-      socialAssessmentBase,
-      socialInsurance: socialAssessmentBase * SOCIAL_INSURANCE_RATE,
-      taxBase,
-    },
+    estimate,
     maxMonthlyRevenue,
     metrics: {
       month: {

@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
+  ActivityType,
   InvoiceStatus,
   VatPayerStatus,
 } from "@/generated/prisma/enums";
@@ -45,6 +46,7 @@ import {
   normalizeMoneyToCents,
   normalizeQuantity,
   normalizeVatRate,
+  normalizeWholeNumber,
   ValidationError,
 } from "@/lib/validation";
 
@@ -210,6 +212,26 @@ export async function upsertProfile(formData: FormData) {
       getRequiredFormString(formData, "accountNumber", "account"),
       bankCode,
     );
+    const activityType =
+      formData.get("activityType") === ActivityType.SECONDARY
+        ? ActivityType.SECONDARY
+        : ActivityType.MAIN;
+    const applyTaxpayerCredit = formData.get("applyTaxpayerCredit") === "on";
+    const flatExpenseRate = normalizeWholeNumber(
+      getOptionalFormString(formData, "flatExpenseRate"),
+      60,
+      { max: 80, min: 0 },
+    );
+    const taxpayerCredit = normalizeWholeNumber(
+      getOptionalFormString(formData, "taxpayerCredit"),
+      30_840,
+      { max: 1_000_000, min: 0 },
+    );
+    const socialThreshold = normalizeWholeNumber(
+      getOptionalFormString(formData, "socialThreshold"),
+      117_521,
+      { max: 10_000_000, min: 0 },
+    );
     const vatPayerStatus =
       formData.get("vatPayerStatus") === VatPayerStatus.PAYER
         ? VatPayerStatus.PAYER
@@ -219,7 +241,12 @@ export async function upsertProfile(formData: FormData) {
       accountNumber,
       bankCode,
       city,
+      activityType,
+      applyTaxpayerCredit,
       companyName: getOptionalFormString(formData, "companyName"),
+      flatExpenseRate,
+      socialThreshold,
+      taxpayerCredit,
       country: getOptionalFormString(formData, "country") ?? "Česká republika",
       dic: normalizeDic(getOptionalFormString(formData, "dic")),
       displayName,

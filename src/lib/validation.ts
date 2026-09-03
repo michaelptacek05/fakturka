@@ -242,3 +242,22 @@ export function normalizeVatRate(value: FormDataEntryValue | null) {
 
   return parsed;
 }
+
+/**
+ * Celé nezáporné číslo z formuláře. Prázdná nebo nesmyslná hodnota spadne
+ * na výchozí, hodnoty mimo rozsah se ořežou — u nastavení odvodů nechceme
+ * kvůli překlepu shodit uložení celého profilu.
+ */
+export function normalizeWholeNumber(
+  value: string | null | undefined,
+  fallback: number,
+  range: { max: number; min: number },
+) {
+  const parsed = Number.parseInt((value ?? "").replace(/\s/g, ""), 10);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(Math.max(parsed, range.min), range.max);
+}

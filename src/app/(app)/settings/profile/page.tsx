@@ -21,12 +21,20 @@ import {
 import { InputField, SelectField } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/components/ui/page-header";
-import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
+import {
+  ActivityType,
+  InvoiceAssetType,
+  VatPayerStatus,
+} from "@/generated/prisma/enums";
 import { getInvoiceAssetTypeLabel } from "@/lib/invoice-assets";
 import {
   DEFAULT_INVOICE_NUMBER_FORMAT,
   INVOICE_NUMBER_FORMATS,
 } from "@/lib/invoice-number";
+import {
+  FLAT_EXPENSE_LABELS,
+  FLAT_EXPENSE_RATES,
+} from "@/lib/tax-estimate";
 import { prisma } from "@/lib/prisma";
 import { validateBankProfile } from "@/lib/spayd";
 import { getValidationMessage } from "@/lib/validation";
@@ -290,6 +298,80 @@ export default async function ProfilePage({
                 defaultValue={profile?.swift ?? ""}
               />
             </div>
+          </CardContent>
+
+          <CardHeader className="border-t border-b-0">
+            <CardTitle>Odvody a daně</CardTitle>
+            <CardDescription>
+              Z těchto hodnot vychází orientační odhad na dashboardu.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField
+                label="Režim činnosti"
+                name="activityType"
+                defaultValue={profile?.activityType ?? ActivityType.MAIN}
+                hint="Studium, zaměstnání, rodičovská i důchod znamenají vedlejší činnost."
+              >
+                <option value={ActivityType.MAIN}>Hlavní činnost</option>
+                <option value={ActivityType.SECONDARY}>
+                  Vedlejší činnost (student, zaměstnání, rodičovská, důchod)
+                </option>
+              </SelectField>
+
+              <SelectField
+                label="Paušální výdaje"
+                name="flatExpenseRate"
+                defaultValue={String(profile?.flatExpenseRate ?? 60)}
+              >
+                {FLAT_EXPENSE_RATES.map((rate) => (
+                  <option key={rate} value={rate}>
+                    {FLAT_EXPENSE_LABELS[rate]}
+                  </option>
+                ))}
+              </SelectField>
+
+              <InputField
+                label="Sleva na poplatníka za rok"
+                name="taxpayerCredit"
+                inputMode="numeric"
+                defaultValue={String(profile?.taxpayerCredit ?? 30840)}
+                hint="V Kč. Ověřte si aktuální hodnotu, mění se."
+              />
+
+              <InputField
+                label="Rozhodná částka pro sociální"
+                name="socialThreshold"
+                inputMode="numeric"
+                defaultValue={String(profile?.socialThreshold ?? 117521)}
+                hint="V Kč. Do tohoto zisku se u vedlejší činnosti sociální neplatí."
+              />
+            </div>
+
+            <label className="flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                name="applyTaxpayerCredit"
+                defaultChecked={profile?.applyTaxpayerCredit ?? true}
+                className="mt-0.5 size-4 accent-primary"
+              />
+              <span>
+                Uplatňuji slevu na poplatníka
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Odečte se od vypočtené daně. Nechte zapnuté, pokud ji
+                  neuplatňuje někdo jiný za vás.
+                </span>
+              </span>
+            </label>
+
+            <Alert variant="warning" title="Čísla si ověřte">
+              Sazby i limity se mění každý rok a zdroje se občas rozcházejí.
+              Aplikace je jen počítá, nehlídá jejich platnost — aktuální
+              hodnoty najdete na ČSSZ a u své zdravotní pojišťovny. Odhad
+              nenahrazuje účetní ani daňové poradenství.
+            </Alert>
           </CardContent>
 
           <CardHeader className="border-t border-b-0">

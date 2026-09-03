@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { buildDashboardData } from "@/lib/dashboard";
+import { SIMPLIFICATIONS, type TaxSettings } from "@/lib/tax-estimate";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
@@ -82,9 +83,34 @@ async function getDashboardInvoices() {
   }
 }
 
+/** Nastavení odvodů z profilu. Bez profilu se použijí výchozí hodnoty. */
+async function getTaxSettings(): Promise<TaxSettings | undefined> {
+  try {
+    const profile = await prisma.userProfile.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: {
+        activityType: true,
+        applyTaxpayerCredit: true,
+        flatExpenseRate: true,
+        socialThreshold: true,
+        taxpayerCredit: true,
+      },
+    });
+
+    return profile ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export default async function Home() {
-  const invoices = await getDashboardInvoices();
-  const dashboard = invoices ? buildDashboardData(invoices) : null;
+  const [invoices, taxSettings] = await Promise.all([
+    getDashboardInvoices(),
+    getTaxSettings(),
+  ]);
+  const dashboard = invoices
+    ? buildDashboardData(invoices, new Date(), taxSettings)
+    : null;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -392,60 +418,98 @@ export default async function Home() {
                   <CardTitle>Odhad odvodů</CardTitle>
                 </div>
                 <CardDescription>
-                  Orientačně za letošní příjmy, paušál 60 %, bez slev a
-                  minimálních záloh.
+                  {dashboard.estimate.isSecondary
+                    ? "Vedlejší činnost. Doplácí se najednou po podání přiznání a přehledů."
+                    : "Hlavní činnost. Orientačně za letošní zaplacené faktury."}
                 </CardDescription>
               </CardHeader>
 
-              <CardContent>
-                <dl className="grid gap-3 text-sm">
+              <CardContent className="space-y-5">
+                <div className="rounded-lg border border-border bg-muted/50 p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Odhad k doplacení
+                  </p>
+                  <p className="pt-1 text-2xl font-semibold tracking-tight">
+                    {formatCurrency(dashboard.estimate.total)}
+                  </p>
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    Ze základu {formatCurrency(dashboard.estimate.taxBase)} po
+                    odečtení {formatCurrency(dashboard.estimate.flatExpenses)}{" "}
+                    paušálních výdajů.
+                  </p>
+                </div>
+
+                <dl className="space-y-4 text-sm">
                   {[
                     {
-                      label: "Příjem",
-                      value: dashboard.estimate.paidRevenue,
+                      amount: dashboard.estimate.incomeTax.amount,
+                      label: "Daň z příjmu",
+                      note: dashboard.estimate.incomeTax.note,
                     },
                     {
-                      label: "Paušální výdaje",
-                      value: dashboard.estimate.flatExpenses,
-                    },
-                  ].map((row) => (
-                    <div className="flex justify-between gap-4" key={row.label}>
-                      <dt className="text-muted-foreground">{row.label}</dt>
-                      <dd className="font-medium">
-                        {formatCurrency(row.value)}
-                      </dd>
-                    </div>
-                  ))}
-
-                  <div className="flex justify-between gap-4 border-t border-border pt-3">
-                    <dt className="text-muted-foreground">Daňový základ</dt>
-                    <dd className="font-medium">
-                      {formatCurrency(dashboard.estimate.taxBase)}
-                    </dd>
-                  </div>
-
-                  {[
-                    {
-                      label: "Daň 15 % před slevami",
-                      value: dashboard.estimate.incomeTaxBeforeCredits,
-                    },
-                    {
+                      amount: dashboard.estimate.social.amount,
                       label: "Sociální pojistné",
-                      value: dashboard.estimate.socialInsurance,
+                      note: dashboard.estimate.social.note,
                     },
                     {
+                      amount: dashboard.estimate.health.amount,
                       label: "Zdravotní pojistné",
-                      value: dashboard.estimate.healthInsurance,
+                      note: dashboard.estimate.health.note,
                     },
                   ].map((row) => (
-                    <div className="flex justify-between gap-4" key={row.label}>
-                      <dt className="text-muted-foreground">{row.label}</dt>
-                      <dd className="font-medium">
-                        {formatCurrency(row.value)}
-                      </dd>
+                    <div key={row.label}>
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">{row.label}</dt>
+                        <dd
+                          className={
+                            row.amount === 0
+                              ? "font-medium text-success"
+                              : "font-medium"
+                          }
+                        >
+                          {formatCurrency(row.amount)}
+                        </dd>
+                      </div>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                        {row.note}
+                      </p>
                     </div>
                   ))}
                 </dl>
+
+                {dashboard.estimate.social.remainingToThreshold !== null &&
+                dashboard.estimate.social.remainingToThreshold > 0 ? (
+                  <Alert
+                    variant="info"
+                    title={`Do rozhodné částky zbývá ${formatCurrency(
+                      dashboard.estimate.social.remainingToThreshold,
+                    )} zisku`}
+                  >
+                    Po jejím překročení se sociální pojistné začne platit
+                    zpětně za celý rok.
+                  </Alert>
+                ) : null}
+
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer font-medium">
+                    Co odhad neumí
+                  </summary>
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    {SIMPLIFICATIONS.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                  <p className="mt-2">
+                    Sazby a částky si nastavíš v{" "}
+                    <Link
+                      href="/settings/profile"
+                      className="underline underline-offset-4"
+                    >
+                      profilu
+                    </Link>
+                    . Nenahrazuje daňového poradce.
+                  </p>
+                </details>
               </CardContent>
             </Card>
           </section>

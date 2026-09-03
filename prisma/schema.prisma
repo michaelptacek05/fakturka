@@ -12,6 +12,13 @@ enum VatPayerStatus {
   PAYER
 }
 
+/// Hlavní činnost = podnikání je jediný zdroj. Vedlejší = student,
+/// zaměstnanec, rodičovská nebo důchodce. Rozhoduje o odvodech.
+enum ActivityType {
+  MAIN
+  SECONDARY
+}
+
 enum InvoiceStatus {
   DRAFT
   ISSUED
@@ -66,6 +73,15 @@ model UserProfile {
   bankCode       String           @db.VarChar(10)
   iban           String?
   swift          String?
+  /// Nastavení pro orientační odhad odvodů na dashboardu.
+  activityType        ActivityType @default(MAIN)
+  applyTaxpayerCredit Boolean      @default(true)
+  /// Roční sleva na poplatníka v Kč.
+  taxpayerCredit      Int          @default(30840)
+  /// Paušální výdaje v procentech: 40, 60 nebo 80.
+  flatExpenseRate     Int          @default(60)
+  /// Rozhodná částka pro účast na důchodovém pojištění u vedlejší činnosti.
+  socialThreshold     Int          @default(117521)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   assets         InvoiceAsset[]
