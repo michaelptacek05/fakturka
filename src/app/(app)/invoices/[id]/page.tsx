@@ -3,15 +3,24 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Download, Pencil } from "lucide-react";
 
+import { InvoicePaymentsCard } from "@/components/invoices/invoice-payments-card";
 import { InvoiceStatusActions } from "@/components/invoices/invoice-status-actions";
 import { PaymentQr } from "@/components/invoices/payment-qr";
 import { PrintButton } from "@/components/invoices/print-button";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { InvoiceAssetType, InvoiceStatus, VatPayerStatus } from "@/generated/prisma/enums";
+import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
+import {
+  fromCents,
+  getInvoiceVisualState,
+  getPaymentSummary,
+  type InvoiceVisualState,
+  type PayableInvoice,
+} from "@/lib/invoice-payment";
 import { prisma } from "@/lib/prisma";
+import { getValidationMessage } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +38,9 @@ async function getInvoice(id: string) {
         items: {
           orderBy: { position: "asc" },
         },
+        payments: {
+          orderBy: { paidOn: "desc" },
+        },
         profile: {
           include: {
             assets: {
@@ -44,31 +56,36 @@ async function getInvoice(id: string) {
   }
 }
 
-function getStatusBadge(invoice: {
-  dueDate: Date;
-  paidAt: Date | null;
-  status: InvoiceStatus;
-}) {
-  if (invoice.status === InvoiceStatus.CANCELLED) {
-    return { label: "Stornováno", variant: "outline" as const };
+/** Text i barva štítku se řídí vizuálním stavem, ať detail říká totéž co seznam. */
+const visualStateBadges: Record<
+  InvoiceVisualState,
+  {
+    label: string;
+    variant: "default" | "destructive" | "outline" | "success" | "warning";
+  }
+> = {
+  cancelled: { label: "Stornováno", variant: "outline" },
+  default: { label: "Koncept", variant: "default" },
+  overdue: { label: "Po splatnosti", variant: "destructive" },
+  paid: { label: "Zaplaceno", variant: "success" },
+  partial: { label: "Částečně uhrazeno", variant: "warning" },
+  unpaid: { label: "Vystaveno", variant: "warning" },
+};
+
+function getStatusBadge(invoice: PayableInvoice) {
+  return visualStateBadges[getInvoiceVisualState(invoice)];
+}
+
+function getErrorMessage(error?: string | string[]) {
+  if (error === "db") {
+    return "Akci se nepodařilo dokončit, protože databáze není dostupná.";
   }
 
-  if (invoice.status === InvoiceStatus.PAID) {
-    return { label: "Zaplaceno", variant: "success" as const };
+  if (error === "readonly") {
+    return "Tuto akci nelze provést, protože je faktura stornovaná.";
   }
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  if (invoice.status === InvoiceStatus.ISSUED && invoice.dueDate < todayStart) {
-    return { label: "Po splatnosti", variant: "destructive" as const };
-  }
-
-  if (invoice.status === InvoiceStatus.ISSUED) {
-    return { label: "Vystaveno", variant: "warning" as const };
-  }
-
-  return { label: "Koncept", variant: "default" as const };
+  return getValidationMessage(error);
 }
 
 export default async function InvoiceDetailPage({
@@ -84,15 +101,16 @@ export default async function InvoiceDetailPage({
       ? "Změny faktury byly uloženy."
       : query?.paid === "1"
         ? "Faktura byla označena jako zaplacená."
-        : query?.cancelled === "1"
-          ? "Faktura byla stornována."
-          : null;
-  const errorMessage =
-    query?.error === "db"
-      ? "Akci se nepodařilo dokončit, protože databáze není dostupná."
-      : query?.error === "readonly"
-        ? "Tuto akci nelze provést, protože je faktura stornovaná."
-        : null;
+        : query?.cancelled === "refunded"
+          ? "Faktura byla stornována a vrácení úhrady zaevidováno."
+          : query?.cancelled === "1"
+            ? "Faktura byla stornována."
+          : query?.payment === "added"
+            ? "Úhrada byla zaevidována."
+            : query?.payment === "removed"
+              ? "Úhrada byla smazána."
+              : null;
+  const errorMessage = getErrorMessage(query?.error);
 
   if (!invoice) {
     notFound();
@@ -102,6 +120,8 @@ export default async function InvoiceDetailPage({
   const clientName = invoice.clientName;
   const isVatPayer = invoice.profile.vatPayerStatus === VatPayerStatus.PAYER;
   const status = getStatusBadge(invoice);
+  const summary = getPaymentSummary(invoice);
+  const remaining = fromCents(summary.remainingCents);
   const logo = invoice.profile.assets.find(
     (asset) => asset.type === InvoiceAssetType.LOGO,
   );
@@ -134,6 +154,9 @@ export default async function InvoiceDetailPage({
           </div>
           <p className="text-sm text-muted-foreground">
             {clientName} · splatnost {formatDate(invoice.dueDate)}
+            {summary.isPartiallyPaid
+              ? ` · zbývá ${formatCurrency(remaining)}`
+              : ""}
             {invoice.paidAt ? ` · uhrazeno ${formatDate(invoice.paidAt)}` : ""}
           </p>
         </div>
@@ -145,7 +168,11 @@ export default async function InvoiceDetailPage({
               Upravit
             </Link>
           </Button>
-          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
+          <InvoiceStatusActions
+            invoiceId={invoice.id}
+            paidCents={summary.paidCents}
+            status={invoice.status}
+          />
           <Button asChild variant="outline" size="sm">
             <Link href={`/invoices/${invoice.id}/pdf`}>
               <Download className="size-4" aria-hidden="true" />
@@ -167,6 +194,14 @@ export default async function InvoiceDetailPage({
           <Alert variant="destructive" title={errorMessage} />
         </div>
       ) : null}
+
+      <InvoicePaymentsCard
+        invoiceId={invoice.id}
+        paidAmount={invoice.paidAmount}
+        payments={invoice.payments}
+        status={invoice.status}
+        total={invoice.total}
+      />
 
       {/*
         List faktury zůstává vždy světlý — je to náhled tiskového dokumentu,
@@ -331,17 +366,20 @@ export default async function InvoiceDetailPage({
               <p>SWIFT: {invoice.profile.swift}</p>
             ) : null}
             <p>Variabilní symbol: {invoice.variableSymbol}</p>
-            <PaymentQr
-              accountNumber={invoice.profile.accountNumber}
-              amount={invoice.total}
-              bankCode={invoice.profile.bankCode}
-              currency={invoice.currency}
-              dueDate={invoice.dueDate}
-              iban={invoice.profile.iban}
-              invoiceNumber={invoice.number}
-              swift={invoice.profile.swift}
-              variableSymbol={invoice.variableSymbol}
-            />
+            {/* QR platí vždy na doplatek — u uhrazené faktury nemá co načítat. */}
+            {summary.remainingCents > 0 ? (
+              <PaymentQr
+                accountNumber={invoice.profile.accountNumber}
+                amount={remaining}
+                bankCode={invoice.profile.bankCode}
+                currency={invoice.currency}
+                dueDate={invoice.dueDate}
+                iban={invoice.profile.iban}
+                invoiceNumber={invoice.number}
+                swift={invoice.profile.swift}
+                variableSymbol={invoice.variableSymbol}
+              />
+            ) : null}
             {signature || stamp ? (
               <div className="mt-5 flex flex-wrap items-end gap-4">
                 {signature ? (
@@ -394,6 +432,20 @@ export default async function InvoiceDetailPage({
               <span>Celkem k úhradě</span>
               <strong>{formatCurrency(invoice.total)}</strong>
             </div>
+            {summary.isPartiallyPaid ? (
+              <>
+                <div className="flex justify-between text-zinc-600">
+                  <span>Uhrazeno</span>
+                  <strong className="font-medium">
+                    {formatCurrency(fromCents(summary.paidCents))}
+                  </strong>
+                </div>
+                <div className="flex justify-between border-t border-zinc-300 pt-2 font-semibold">
+                  <span>Zbývá k úhradě</span>
+                  <strong>{formatCurrency(remaining)}</strong>
+                </div>
+              </>
+            ) : null}
           </div>
         </section>
       </article>

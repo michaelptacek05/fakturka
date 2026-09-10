@@ -1,4 +1,13 @@
 import { ActivityType, InvoiceStatus } from "@/generated/prisma/enums";
+import {
+  fromCents,
+  getInvoiceVisualState,
+  getPaymentSummary,
+  isOutstanding,
+  sumPaymentsCents,
+  toCents,
+  type MoneyLike,
+} from "@/lib/invoice-payment";
 import { estimateTaxes, type TaxSettings } from "@/lib/tax-estimate";
 
 /** Když profil ještě neexistuje, počítáme jako hlavní činnost bez slev. */
@@ -19,14 +28,17 @@ type DashboardInvoice = {
   id: string;
   issueDate: Date;
   number: string;
-  paidAt: Date | null;
+  /** Denormalizovaný součet plateb, zdrojem pravdy zůstává `payments`. */
+  paidAmount: MoneyLike;
+  payments: { amount: MoneyLike; paidOn: Date }[];
   status: InvoiceStatus;
   taxableSupplyDate: Date | null;
-  total: { toString(): string };
+  total: MoneyLike;
 };
 
-function toAmount(value: { toString(): string }) {
-  return Number(value.toString());
+/** Přes haléře, ať se zobrazená částka nerozchází se součty v grafu a metrikách. */
+function toAmount(value: MoneyLike) {
+  return fromCents(toCents(value));
 }
 
 function startOfDay(date: Date) {
@@ -55,16 +67,45 @@ function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function sumInvoices(invoices: DashboardInvoice[]) {
-  return invoices.reduce((sum, invoice) => sum + toAmount(invoice.total), 0);
+function sumTotalsCents(invoices: DashboardInvoice[]) {
+  return invoices.reduce((sum, invoice) => sum + toCents(invoice.total), 0);
 }
 
-function isPaidInRange(invoice: DashboardInvoice, from: Date, to: Date) {
-  return (
-    invoice.status === InvoiceStatus.PAID &&
-    invoice.paidAt !== null &&
-    invoice.paidAt >= from &&
-    invoice.paidAt < to
+/** U nezaplacených nás zajímá, kolik ještě přijde, ne na kolik byl doklad vystavený. */
+function sumRemainingCents(invoices: DashboardInvoice[]) {
+  return invoices.reduce(
+    (sum, invoice) => sum + getPaymentSummary(invoice).remainingCents,
+    0,
+  );
+}
+
+/** Platby s datem úhrady v intervalu <from, to). */
+function getPaymentsInRange(invoice: DashboardInvoice, from: Date, to: Date) {
+  return invoice.payments.filter(
+    (payment) => payment.paidOn >= from && payment.paidOn < to,
+  );
+}
+
+/**
+ * Příjmy vycházejí ze skutečných plateb, ne z celkových částek faktur — jinak by
+ * částečná úhrada spadla do měsíce buď celá, nebo vůbec. `count` je počet faktur
+ * s úhradou, ne počet plateb: dvě splátky téže faktury jsou pořád jedna faktura.
+ */
+function getRevenueInRange(invoices: DashboardInvoice[], from: Date, to: Date) {
+  return invoices.reduce(
+    (accumulator, invoice) => {
+      const periodCents = sumPaymentsCents(getPaymentsInRange(invoice, from, to));
+
+      // Doklad, kde se přijetí a vrácení v období vyruší, nepřinesl nic —
+      // do počtu faktur s úhradou proto nepatří.
+      return periodCents === 0
+        ? accumulator
+        : {
+            count: accumulator.count + 1,
+            totalCents: accumulator.totalCents + periodCents,
+          };
+    },
+    { count: 0, totalCents: 0 },
   );
 }
 
@@ -81,6 +122,7 @@ export function buildDashboardData(
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);
   const quarterStart = startOfQuarter(today);
+  const nextQuarterStart = addMonths(quarterStart, 3);
   const yearStart = startOfYear(today);
   const nextYearStart = new Date(today.getFullYear() + 1, 0, 1);
   const vatWindowStart = new Date(todayStart);
@@ -90,19 +132,19 @@ export function buildDashboardData(
     addMonths(chartStart, index),
   );
 
-  const paidThisMonth = invoices.filter((invoice) =>
-    isPaidInRange(invoice, monthStart, nextMonthStart),
+  // Storno ruší doklad, ne pohyb peněz — platby se proto počítají i na
+  // stornovaných fakturách. Vrácená úhrada je záporná platba, takže se
+  // odečte sama v tom období, kdy peníze reálně odešly.
+  const monthRevenue = getRevenueInRange(invoices, monthStart, nextMonthStart);
+  const quarterRevenue = getRevenueInRange(
+    invoices,
+    quarterStart,
+    nextQuarterStart,
   );
-  const paidThisQuarter = invoices.filter((invoice) =>
-    isPaidInRange(invoice, quarterStart, nextMonthStart),
-  );
-  const paidThisYear = invoices.filter((invoice) =>
-    isPaidInRange(invoice, yearStart, nextYearStart),
-  );
-  const unpaid = invoices.filter(
-    (invoice) => invoice.status === InvoiceStatus.ISSUED && invoice.paidAt === null,
-  );
+  const yearRevenue = getRevenueInRange(invoices, yearStart, nextYearStart);
+  const unpaid = invoices.filter((invoice) => isOutstanding(invoice));
   const overdue = unpaid.filter((invoice) => invoice.dueDate < todayStart);
+  // Limit DPH je obrat, ne cash — počítá se z celé částky k datu plnění.
   const vatLimitInvoices = invoices.filter((invoice) => {
     const revenueDate = getRevenueDate(invoice);
 
@@ -115,20 +157,18 @@ export function buildDashboardData(
 
   const monthlyRevenue = months.map((month) => {
     const nextMonth = addMonths(month, 1);
-    const total = sumInvoices(
-      invoices.filter((invoice) => isPaidInRange(invoice, month, nextMonth)),
-    );
 
     return {
       key: monthKey(month),
       label: new Intl.DateTimeFormat("cs-CZ", { month: "short" }).format(month),
-      total,
+      total: fromCents(getRevenueInRange(invoices, month, nextMonth).totalCents),
     };
   });
   const maxMonthlyRevenue = Math.max(...monthlyRevenue.map((item) => item.total), 0);
-  const annualPaidRevenue = sumInvoices(paidThisYear);
+  // Odvody se odhadují ze skutečného cash flow, tedy z plateb přijatých letos.
+  const annualPaidRevenue = fromCents(yearRevenue.totalCents);
   const estimate = estimateTaxes(annualPaidRevenue, taxSettings);
-  const vatLimitRevenue = sumInvoices(vatLimitInvoices);
+  const vatLimitRevenue = fromCents(sumTotalsCents(vatLimitInvoices));
   const recentInvoices = invoices
     .slice()
     .sort((a, b) => b.issueDate.getTime() - a.issueDate.getTime())
@@ -138,8 +178,11 @@ export function buildDashboardData(
       dueDate: invoice.dueDate,
       id: invoice.id,
       number: invoice.number,
+      paidAmount: toAmount(invoice.paidAmount),
       status: invoice.status,
       total: toAmount(invoice.total),
+      // Stav se dopočítává tady, ať přehled i seznam faktur říkají totéž.
+      visualState: getInvoiceVisualState(invoice, today),
     }));
 
   return {
@@ -147,20 +190,20 @@ export function buildDashboardData(
     maxMonthlyRevenue,
     metrics: {
       month: {
-        count: paidThisMonth.length,
-        total: sumInvoices(paidThisMonth),
+        count: monthRevenue.count,
+        total: fromCents(monthRevenue.totalCents),
       },
       overdue: {
         count: overdue.length,
-        total: sumInvoices(overdue),
+        total: fromCents(sumRemainingCents(overdue)),
       },
       quarter: {
-        count: paidThisQuarter.length,
-        total: sumInvoices(paidThisQuarter),
+        count: quarterRevenue.count,
+        total: fromCents(quarterRevenue.totalCents),
       },
       unpaid: {
         count: unpaid.length,
-        total: sumInvoices(unpaid),
+        total: fromCents(sumRemainingCents(unpaid)),
       },
       vatLimit: {
         limit: VAT_LIMIT_CZK,
@@ -169,8 +212,8 @@ export function buildDashboardData(
         total: vatLimitRevenue,
       },
       year: {
-        count: paidThisYear.length,
-        total: annualPaidRevenue,
+        count: yearRevenue.count,
+        total: fromCents(yearRevenue.totalCents),
       },
     },
     monthlyRevenue,

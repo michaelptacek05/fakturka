@@ -16,9 +16,8 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
+import type { InvoiceVisualState } from "@/lib/invoice-payment";
 import { cn } from "@/lib/utils";
-
-type InvoiceVisualState = "default" | "unpaid" | "overdue" | "paid" | "cancelled";
 
 type InvoiceBulkRow = {
   clientName: string;
@@ -27,6 +26,8 @@ type InvoiceBulkRow = {
   id: string;
   issueDate: string;
   number: string;
+  /** Jen u částečně uhrazené faktury — doplní se pod celkovou částku. */
+  remaining?: string;
   statusLabel: string;
   total: string;
   visualState: InvoiceVisualState;
@@ -42,6 +43,7 @@ const rowAccent: Record<InvoiceVisualState, string> = {
   default: "before:bg-transparent",
   overdue: "before:bg-destructive",
   paid: "before:bg-success",
+  partial: "before:bg-warning",
   unpaid: "before:bg-warning",
 };
 
@@ -53,6 +55,7 @@ const badgeVariant: Record<
   default: "default",
   overdue: "destructive",
   paid: "success",
+  partial: "warning",
   unpaid: "warning",
 };
 
@@ -190,6 +193,11 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
                 </TableCell>
                 <TableCell className="text-right font-medium">
                   {invoice.total}
+                  {invoice.remaining ? (
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      zbývá {invoice.remaining}
+                    </span>
+                  ) : null}
                 </TableCell>
                 <TableCell>
                   <Badge variant={badgeVariant[invoice.visualState]}>

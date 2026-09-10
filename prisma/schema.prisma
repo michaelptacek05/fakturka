@@ -149,6 +149,9 @@ model Invoice {
   subtotal          Decimal          @default(0) @db.Decimal(12, 2)
   vatTotal          Decimal          @default(0) @db.Decimal(12, 2)
   total             Decimal          @default(0) @db.Decimal(12, 2)
+  /// Denormalizovaný součet plateb. Zdrojem pravdy jsou záznamy v InvoicePayment,
+  /// tohle je jen cache, aby přehledy nemusely agregovat přes všechny doklady.
+  paidAmount        Decimal          @default(0) @db.Decimal(12, 2)
   notes             String?
   /// Snapshot odběratele v době vystavení. Doklad se nesmí měnit,
   /// když se později upraví adresář odběratelů.
@@ -166,6 +169,7 @@ model Invoice {
   updatedAt         DateTime         @updatedAt
   client            Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
   items             InvoiceItem[]
+  payments          InvoicePayment[]
   profile           UserProfile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
   sequence          InvoiceSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
@@ -190,6 +194,20 @@ model InvoiceItem {
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
+}
+
+/// Jednotlivá úhrada faktury. Faktura může být uhrazena po částech —
+/// dokud součet plateb nedosáhne celkové částky, zůstává nezaplacená.
+model InvoicePayment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal  @db.Decimal(12, 2)
+  paidOn    DateTime
+  note      String?
+  createdAt DateTime @default(now())
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, paidOn])
 }
 
 model InvoiceAsset {

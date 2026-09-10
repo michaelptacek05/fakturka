@@ -11,6 +11,8 @@ Tento projekt je vibe coded. Vzniká iterativně s pomocí AI asistenta, s důra
 - Adresář odběratelů.
 - Vyhledávání firem přes ARES.
 - Vytvoření, úprava, storno a označení faktury jako zaplacené.
+- Částečné úhrady: faktura se eviduje po splátkách a zůstává nezaplacená,
+  dokud součet plateb nedosáhne celkové částky.
 - Údaje odběratele se na faktuře zamrazí, pozdější úprava adresáře doklad nezmění.
 - Číslování faktur podle volitelného formátu s resetem řady na začátku období.
 - Import odběratelů a faktur z CSV exportu Fakturoidu (i z jiného CSV).
@@ -23,7 +25,8 @@ Tento projekt je vibe coded. Vzniká iterativně s pomocí AI asistenta, s důra
 - QR platba ve formátu SPAYD.
 - Server-side PDF export faktury.
 - Logo, podpis a razítko na webové faktuře i v PDF.
-- Dashboard příjmů, nezaplacených faktur a DPH limitu.
+- Dashboard příjmů podle skutečně přijatých plateb, nezaplacených
+  zbytků a DPH limitu.
 - Odhad daně a odvodů s režimem hlavní i vedlejší činnosti (student).
 - Světlý i tmavý motiv.
 
@@ -218,6 +221,46 @@ sazbu daně 23 %, ani jiné slevy než na poplatníka. **Nenahrazuje účetní a
 daňové poradenství** — aktuální sazby si ověřte na ČSSZ a u své zdravotní
 pojišťovny.
 
+## Úhrady faktur
+
+Faktura může být zaplacená po částech. Každá úhrada je samostatný záznam
+s částkou, datem a poznámkou, takže je vidět celá historie plateb.
+
+- Dokud součet úhrad nedosáhne celkové částky, faktura zůstává ve stavu
+  **Vystaveno** a v přehledech se ukazuje jako **Částečně uhrazeno**.
+- Po doplacení se doklad překlopí na **Zaplaceno** a datum úhrady odpovídá
+  poslední platbě.
+- Tlačítko *Označit jako zaplacené* je zkratka, která doplatí zbývající částku
+  jednou platbou.
+- QR platba na webu i v PDF zní na **zbývající** částku, aby odběratel
+  naskenoval doplatek, ne celou fakturu znovu.
+- Dashboard počítá příjmy ze skutečně přijatých plateb. Karta *Nezaplaceno*
+  a *Po splatnosti* ukazují zbývající částky, ne celé doklady.
+- Filtr v seznamu faktur pracuje s tím, co je vidět na štítku, takže jde
+  vyfiltrovat i *Částečně uhrazeno* a *Po splatnosti*.
+- Fakturu s evidovanou úhradou už nelze upravovat. Nejdřív je potřeba smazat
+  platby, aby se změnou položek nespadla celková částka pod už přijaté peníze.
+
+### Storno faktury, na kterou přišly peníze
+
+Storno ruší doklad, ale s penězi nedělá nic — proto se aplikace při stornu
+faktury s evidovanou úhradou zeptá, jestli jste peníze odběrateli vrátili:
+
+- **Peníze si necháváme** — platby zůstanou beze změny a částka se dál počítá
+  do příjmů. Doklad je stornovaný, peníze na účtu ale zůstaly.
+- **Vrátili jsme je** — zapíše se vrácení jako záporná platba k dnešnímu dni.
+  V příjmech se odečte přesně v období, kdy peníze odešly, takže roční součet
+  i odhad odvodů sedí.
+
+Historie plateb se při stornu nikdy nemaže, takže je pohyb peněz dohledatelný.
+
+Pozor: tohle je zjednodušení pro neplátce DPH. **Plátce DPH** zaplacenou
+fakturu nestornuje — vystavuje opravný daňový doklad (dobropis) jako
+samostatný doklad, což aplikace zatím neumí. Konzultujte to s účetní.
+
+Stav *Částečně uhrazeno* se dopočítává z uhrazené částky, stejně jako *Po
+splatnosti* z data. V databázi se neukládá, `InvoiceStatus` zůstává beze změny.
+
 ## Číslování faktur
 
 Formát se nastavuje v **Nastavení → Číslování faktur**. Zástupné znaky:
@@ -266,11 +309,27 @@ o den podle časové zóny hostitele.
 ## Testy
 
 Testy pokrývají čistou logiku bez databáze — číslování faktur, parsování CSV,
-mapování importu z Fakturoidu, řazení úkolů na nástěnce, odhad daně a odvodů
-a validace IČO, DIČ, účtu, IBANu a částek.
+mapování importu z Fakturoidu, řazení úkolů na nástěnce, odhad daně a odvodů,
+výpočet úhrad a stavu faktury, sestavení dashboardu a validace IČO, DIČ, účtu,
+IBANu a částek.
 
 ```bash
 npm test
+```
+
+### Integrační testy
+
+Zvlášť běží testy nad skutečnou databází. Pokrývají evidenci úhrad, kde se
+peníze počítají v transakci — přidání a smazání platby, doplacení, odmítnutí
+přeplatku, zámek editace a chování při souběžném odeslání dvou plateb.
+
+Potřebují spuštěný PostgreSQL a proměnnou `DATABASE_URL`. Testy si vedle
+vývojové databáze **založí vlastní** (`<název>_test`) a dotáhnou na ni migrace,
+takže o lokální data nepřijdeš.
+
+```bash
+docker compose -f docker-compose.dev.yml up -d db
+npm run test:integration
 ```
 
 ## Stav projektu
@@ -290,7 +349,6 @@ Známá omezení:
 
 Další plánované kroky:
 
-- integrační testy nad databází,
 - exporty pro účetní programy (ISDOC),
 - propojení projektů s fakturací (vyfakturováno na projektu),
 - lepší produkční observabilita.

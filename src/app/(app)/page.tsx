@@ -33,50 +33,60 @@ import {
   TableRow,
   TableWrapper,
 } from "@/components/ui/table";
-import { InvoiceStatus } from "@/generated/prisma/enums";
 import { buildDashboardData } from "@/lib/dashboard";
+import {
+  fromCents,
+  getPaymentSummary,
+  type InvoiceVisualState,
+} from "@/lib/invoice-payment";
 import { SIMPLIFICATIONS, type TaxSettings } from "@/lib/tax-estimate";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const statusLabels: Record<InvoiceStatus, string> = {
-  [InvoiceStatus.CANCELLED]: "Stornováno",
-  [InvoiceStatus.DRAFT]: "Koncept",
-  [InvoiceStatus.ISSUED]: "Vystaveno",
-  [InvoiceStatus.OVERDUE]: "Po splatnosti",
-  [InvoiceStatus.PAID]: "Zaplaceno",
+/**
+ * Po splatnosti ani částečná úhrada se v databázi neukládají, dopočítávají se
+ * z data splatnosti a přijatých plateb. Štítek i barva proto vycházejí
+ * z vizuálního stavu, ne ze syrového `status`.
+ */
+const visualStateLabels: Record<InvoiceVisualState, string> = {
+  cancelled: "Stornováno",
+  default: "Koncept",
+  overdue: "Po splatnosti",
+  paid: "Zaplaceno",
+  partial: "Částečně uhrazeno",
+  unpaid: "Vystaveno",
 };
 
-const statusVariants: Record<
-  InvoiceStatus,
+const visualStateVariants: Record<
+  InvoiceVisualState,
   "default" | "success" | "warning" | "destructive" | "outline"
 > = {
-  [InvoiceStatus.CANCELLED]: "outline",
-  [InvoiceStatus.DRAFT]: "default",
-  [InvoiceStatus.ISSUED]: "warning",
-  [InvoiceStatus.OVERDUE]: "destructive",
-  [InvoiceStatus.PAID]: "success",
+  cancelled: "outline",
+  default: "default",
+  overdue: "destructive",
+  paid: "success",
+  partial: "warning",
+  unpaid: "warning",
 };
-
-/**
- * Po splatnosti se v databázi neukládá, dopočítává se z data splatnosti.
- * Štítek i barva proto musí vycházet ze stejného výpočtu.
- */
-function getDisplayStatus(invoice: { dueDate: Date; status: InvoiceStatus }) {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  return invoice.status === InvoiceStatus.ISSUED && invoice.dueDate < todayStart
-    ? InvoiceStatus.OVERDUE
-    : invoice.status;
-}
 
 async function getDashboardInvoices() {
   try {
     return await prisma.invoice.findMany({
       orderBy: { createdAt: "desc" },
+      select: {
+        clientName: true,
+        dueDate: true,
+        id: true,
+        issueDate: true,
+        number: true,
+        paidAmount: true,
+        payments: { select: { amount: true, paidOn: true } },
+        status: true,
+        taxableSupplyDate: true,
+        total: true,
+      },
     });
   } catch {
     return null;
@@ -144,19 +154,19 @@ export default async function Home() {
           <section className="grid gap-4 md:grid-cols-3">
             {[
               {
-                detail: `${dashboard.metrics.month.count} zaplacených faktur`,
+                detail: `${dashboard.metrics.month.count} faktur s úhradou`,
                 icon: CreditCard,
                 label: "Tento měsíc",
                 value: formatCurrency(dashboard.metrics.month.total),
               },
               {
-                detail: `${dashboard.metrics.quarter.count} zaplacených faktur`,
+                detail: `${dashboard.metrics.quarter.count} faktur s úhradou`,
                 icon: BarChart3,
                 label: "Tento kvartál",
                 value: formatCurrency(dashboard.metrics.quarter.total),
               },
               {
-                detail: `${dashboard.metrics.year.count} zaplacených faktur`,
+                detail: `${dashboard.metrics.year.count} faktur s úhradou`,
                 icon: Gauge,
                 label: "Tento rok",
                 value: formatCurrency(dashboard.metrics.year.total),
@@ -190,7 +200,7 @@ export default async function Home() {
                 <div className="space-y-1">
                   <CardTitle>Vývoj příjmů</CardTitle>
                   <CardDescription>
-                    Zaplacené faktury za posledních 12 měsíců
+                    Přijaté platby za posledních 12 měsíců
                   </CardDescription>
                 </div>
                 <Button asChild variant="outline" size="sm">
@@ -262,7 +272,7 @@ export default async function Home() {
                   <p className="text-sm text-muted-foreground">
                     {dashboard.metrics.overdue.count === 0
                       ? "Nic po splatnosti"
-                      : `${dashboard.metrics.overdue.count} faktur čeká na úhradu`}
+                      : `Zbývá doinkasovat u ${dashboard.metrics.overdue.count} faktur`}
                   </p>
                   {dashboard.metrics.overdue.count > 0 ? (
                     <Button
@@ -271,8 +281,8 @@ export default async function Home() {
                       size="sm"
                       className="mt-3 w-full"
                     >
-                      <Link href="/invoices?status=ISSUED">
-                        Projít nezaplacené
+                      <Link href="/invoices?status=OVERDUE">
+                        Projít po splatnosti
                       </Link>
                     </Button>
                   ) : null}
@@ -294,8 +304,8 @@ export default async function Home() {
                     {formatCurrency(dashboard.metrics.unpaid.total)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {dashboard.metrics.unpaid.count} vystavených faktur bez
-                    úhrady
+                    Zbývá doinkasovat u {dashboard.metrics.unpaid.count}{" "}
+                    vystavených faktur
                   </p>
                 </CardContent>
               </Card>
@@ -375,7 +385,7 @@ export default async function Home() {
                     </TableHeader>
                     <TableBody>
                       {dashboard.recentInvoices.map((invoice) => {
-                        const displayStatus = getDisplayStatus(invoice);
+                        const summary = getPaymentSummary(invoice);
 
                         return (
                         <TableRow key={invoice.id}>
@@ -393,10 +403,20 @@ export default async function Home() {
                           </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCurrency(invoice.total)}
+                            {summary.isPartiallyPaid ? (
+                              <span className="block text-xs font-normal text-muted-foreground">
+                                Zbývá{" "}
+                                {formatCurrency(
+                                  fromCents(summary.remainingCents),
+                                )}
+                              </span>
+                            ) : null}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={statusVariants[displayStatus]}>
-                              {statusLabels[displayStatus]}
+                            <Badge
+                              variant={visualStateVariants[invoice.visualState]}
+                            >
+                              {visualStateLabels[invoice.visualState]}
                             </Badge>
                           </TableCell>
                         </TableRow>
@@ -420,7 +440,7 @@ export default async function Home() {
                 <CardDescription>
                   {dashboard.estimate.isSecondary
                     ? "Vedlejší činnost. Doplácí se najednou po podání přiznání a přehledů."
-                    : "Hlavní činnost. Orientačně za letošní zaplacené faktury."}
+                    : "Hlavní činnost. Orientačně z letošních přijatých plateb."}
                 </CardDescription>
               </CardHeader>
 

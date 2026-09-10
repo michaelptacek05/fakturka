@@ -15,6 +15,7 @@ export type ValidationCode =
   | "iban"
   | "ico"
   | "item"
+  | "payment"
   | "quantity"
   | "required";
 
@@ -59,6 +60,8 @@ export function getValidationMessage(error?: string | string[]) {
       return "IČO nemá platný český formát.";
     case "item":
       return "Faktura musí mít alespoň jednu položku s názvem.";
+    case "payment":
+      return "Úhrada musí být kladná částka a nesmí překročit zbývající částku faktury.";
     case "quantity":
       return "Množství položky musí být větší než nula.";
     case "db":
@@ -67,6 +70,8 @@ export function getValidationMessage(error?: string | string[]) {
       return "Záznam nebyl nalezen.";
     case "readonly":
       return "Zaplacenou nebo stornovanou fakturu už nelze upravit.";
+    case "paidlock":
+      return "Fakturu s evidovanou úhradou už nelze upravit. Nejdřív smažte platby.";
     case "required":
     case "validation":
       return "Zkontrolujte prosím povinné údaje.";

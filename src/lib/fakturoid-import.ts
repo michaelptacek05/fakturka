@@ -41,6 +41,8 @@ export type ImportedInvoice = {
   items: ImportedInvoiceItem[];
   notes: string | null;
   number: string;
+  /** Uhrazená částka ze zdroje. Null = zdroj o úhradách nic neříká. */
+  paidAmount: number | null;
   paidAt: string | null;
   reportedTotal: number | null;
   status: ImportedInvoiceStatus;
@@ -99,6 +101,15 @@ const INVOICE_COLUMNS = {
   name: ["client_name", "subject_name", "odberatel", "nazev", "name"],
   notes: ["note", "poznamka", "text"],
   number: ["number", "invoice_number", "cislo", "cislo_faktury", "doklad"],
+  // Samotné "uhrazeno" a "zaplaceno" tu schválně nejsou — ty už patří datu
+  // úhrady a jeden sloupec nemůže být zároveň datum i částka.
+  paidAmount: [
+    "paid_amount",
+    "uhrazena_castka",
+    "uhrazeno_castka",
+    "zaplaceno_castka",
+    "castka_uhrady",
+  ],
   paidAt: ["paid_on", "paid_at", "datum_uhrady", "uhrazeno", "zaplaceno"],
   postalCode: ["client_zip", "zip", "psc", "postal_code"],
   status: ["status", "stav"],
@@ -167,7 +178,12 @@ export function parseImportedDate(value: string) {
   return null;
 }
 
-function parseStatus(value: string, paidAt: string | null): ImportedInvoiceStatus {
+function parseStatus(
+  value: string,
+  paidAt: string | null,
+  paidAmount: number | null,
+  reportedTotal: number | null,
+): ImportedInvoiceStatus {
   const normalized = value.trim().toLowerCase();
 
   if (normalized === "cancelled" || normalized === "canceled" || normalized === "storno") {
@@ -178,7 +194,24 @@ function parseStatus(value: string, paidAt: string | null): ImportedInvoiceStatu
     return "PAID";
   }
 
-  return paidAt ? "PAID" : "ISSUED";
+  // Fakturoid má pro částečnou úhradu vlastní stav, doklad ale zaplacený není.
+  if (normalized === "partial_paid") {
+    return "ISSUED";
+  }
+
+  // Datum úhrady zdroj vyplňuje až při doplacení, takže rozhoduje dřív než
+  // částka — zaokrouhlený export by jinak zaplacenou fakturu zase otevřel.
+  if (paidAt) {
+    return "PAID";
+  }
+
+  // Bez data úhrady rozhodne ohlášená částka: nedoplatek nechá doklad
+  // vystavený a zbytek dopočtou platby.
+  if (paidAmount !== null && reportedTotal !== null && reportedTotal > 0) {
+    return paidAmount >= reportedTotal ? "PAID" : "ISSUED";
+  }
+
+  return "ISSUED";
 }
 
 function normalizeCountry(value: string) {
@@ -373,6 +406,8 @@ export function previewInvoiceImport(
       }
 
       const paidAt = parseImportedDate(getCell(row, map.paidAt));
+      const paidAmount = parseImportedNumber(getCell(row, map.paidAmount));
+      const reportedTotal = parseImportedNumber(getCell(row, map.total));
       const currency = getCell(row, map.currency).toUpperCase() || "CZK";
 
       if (currency !== "CZK") {
@@ -400,9 +435,15 @@ export function previewInvoiceImport(
         items: [],
         notes: emptyToNull(getCell(row, map.notes)),
         number,
+        paidAmount,
         paidAt,
-        reportedTotal: parseImportedNumber(getCell(row, map.total)),
-        status: parseStatus(getCell(row, map.status), paidAt),
+        reportedTotal,
+        status: parseStatus(
+          getCell(row, map.status),
+          paidAt,
+          paidAmount,
+          reportedTotal,
+        ),
         taxableSupplyDate: parseImportedDate(
           getCell(row, map.taxableSupplyDate),
         ),

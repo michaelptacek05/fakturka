@@ -18,6 +18,10 @@ import {
   toDate,
 } from "@/lib/format";
 import {
+  getPaymentSummary,
+  resolvePaymentState,
+} from "@/lib/invoice-payment";
+import {
   buildInvoiceNumber,
   buildVariableSymbol,
   DEFAULT_INVOICE_NUMBER_FORMAT,
@@ -36,6 +40,7 @@ import { prisma } from "@/lib/prisma";
 import {
   getOptionalFormString,
   getRequiredFormString,
+  getValidationCode,
   getValidationErrorParam,
   normalizeAccountNumber,
   normalizeBankCode,
@@ -457,7 +462,7 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
   try {
     invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, profileId: profile.id },
-      select: { clientId: true, status: true },
+      select: { clientId: true, paidAmount: true, status: true, total: true },
     });
   } catch {
     redirect(`/invoices/${invoiceId}/edit?error=db`);
@@ -469,6 +474,11 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
 
   if (invoice.status === InvoiceStatus.CANCELLED || invoice.status === InvoiceStatus.PAID) {
     redirect(`/invoices/${invoiceId}/edit?error=readonly`);
+  }
+
+  // Změna položek by posunula celkovou částku pod už evidované úhrady.
+  if (getPaymentSummary(invoice).paidCents > 0) {
+    redirect(`/invoices/${invoiceId}/edit?error=paidlock`);
   }
 
   let invoiceData: ReturnType<typeof parseInvoiceFormData>;
@@ -529,66 +539,278 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
   redirect(`/invoices/${invoiceId}?saved=1`);
 }
 
-export async function markInvoicePaid(invoiceId: string) {
+/**
+ * Chyba zjištěná až uvnitř transakce. Redirect z callbacku by transakci
+ * shodil vlastní výjimkou, proto se kód přenese ven a přesměruje se až tam.
+ */
+class PaymentStateError extends Error {
+  code: string;
+
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
+/**
+ * Přepočte uhrazenou částku a stav dokladu podle evidovaných plateb.
+ * Voláme vždy uvnitř transakce, aby se cache `paidAmount` nerozešla s platbami.
+ */
+async function syncInvoicePaymentState(
+  tx: Pick<typeof prisma, "invoice" | "invoicePayment">,
+  invoiceId: string,
+) {
+  const invoice = await tx.invoice.findUnique({
+    select: {
+      payments: { select: { amount: true, paidOn: true } },
+      status: true,
+      total: true,
+    },
+    where: { id: invoiceId },
+  });
+
+  if (!invoice) {
+    return;
+  }
+
+  await tx.invoice.update({
+    data: resolvePaymentState({
+      currentStatus: invoice.status,
+      payments: invoice.payments,
+      total: invoice.total,
+    }),
+    where: { id: invoiceId },
+  });
+}
+
+export async function addInvoicePayment(invoiceId: string, formData: FormData) {
+  let amountCents: number;
+  let paidOn: Date;
+  let note: string | null;
+
   try {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      select: { status: true },
+    amountCents = normalizeMoneyToCents(formData.get("amount"));
+
+    if (amountCents <= 0) {
+      throw new ValidationError("payment", "Úhrada musí být kladná částka.");
+    }
+
+    paidOn = toDate(getOptionalFormString(formData, "paidOn"), new Date());
+    note = getOptionalFormString(formData, "note");
+  } catch (error) {
+    // Nečitelnou částku hlásíme jako chybu úhrady, ne jako chybu ceníku.
+    const code =
+      getValidationCode(error) === "amount" ? "payment" : getValidationCode(error);
+
+    redirect(`/invoices/${invoiceId}?error=${encodeURIComponent(code)}`);
+  }
+
+  try {
+    // Stav se čte až uvnitř transakce: kontrola nad daty načtenými dřív by
+    // při dvojím odeslání pustila obě platby a faktura by se přeplatila.
+    await prisma.$transaction(
+      async (tx) => {
+        const invoice = await tx.invoice.findUnique({
+          select: { paidAmount: true, status: true, total: true },
+          where: { id: invoiceId },
+        });
+
+        if (!invoice) {
+          throw new PaymentStateError("notfound");
+        }
+
+        if (invoice.status === InvoiceStatus.CANCELLED) {
+          throw new PaymentStateError("readonly");
+        }
+
+        if (amountCents > getPaymentSummary(invoice).remainingCents) {
+          throw new PaymentStateError("payment");
+        }
+
+        await tx.invoicePayment.create({
+          data: {
+            amount: decimalFromCents(amountCents),
+            invoiceId,
+            note,
+            paidOn,
+          },
+        });
+
+        await syncInvoicePaymentState(tx, invoiceId);
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    if (error instanceof PaymentStateError) {
+      if (error.code === "notfound") {
+        redirect("/invoices?error=notfound");
+      }
+
+      redirect(`/invoices/${invoiceId}?error=${error.code}`);
+    }
+
+    redirect(`/invoices/${invoiceId}?error=db`);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  redirect(`/invoices/${invoiceId}?payment=added`);
+}
+
+export async function deleteInvoicePayment(paymentId: string) {
+  let payment;
+
+  try {
+    payment = await prisma.invoicePayment.findUnique({
+      select: { invoiceId: true },
+      where: { id: paymentId },
     });
+  } catch {
+    redirect("/invoices?error=db");
+  }
 
-    if (!invoice) {
-      redirect("/invoices?error=notfound");
-    }
+  if (!payment) {
+    redirect("/invoices?error=notfound");
+  }
 
-    if (invoice.status === InvoiceStatus.CANCELLED) {
-      redirect(`/invoices/${invoiceId}?error=readonly`);
-    }
+  const { invoiceId } = payment;
 
-    if (invoice.status !== InvoiceStatus.PAID) {
-      await prisma.invoice.update({
-        data: {
-          paidAt: new Date(),
-          status: InvoiceStatus.PAID,
-        },
-        where: { id: invoiceId },
-      });
-    }
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.invoicePayment.delete({ where: { id: paymentId } });
+      await syncInvoicePaymentState(tx, invoiceId);
+    });
   } catch {
     redirect(`/invoices/${invoiceId}?error=db`);
   }
 
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  redirect(`/invoices/${invoiceId}?payment=removed`);
+}
+
+/**
+ * Doplatí zbývající částku jednou platbou. Zkratka pro běžný případ
+ * „přišlo to celé“ — historie plateb tím zůstane úplná.
+ */
+export async function markInvoicePaid(invoiceId: string) {
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const invoice = await tx.invoice.findUnique({
+          select: { paidAmount: true, status: true, total: true },
+          where: { id: invoiceId },
+        });
+
+        if (!invoice) {
+          throw new PaymentStateError("notfound");
+        }
+
+        if (invoice.status === InvoiceStatus.CANCELLED) {
+          throw new PaymentStateError("readonly");
+        }
+
+        const { remainingCents } = getPaymentSummary(invoice);
+
+        // Doklad na nulovou částku nemá co doplácet, stav se přesto srovná.
+        if (remainingCents > 0) {
+          await tx.invoicePayment.create({
+            data: {
+              amount: decimalFromCents(remainingCents),
+              invoiceId,
+              paidOn: new Date(),
+            },
+          });
+        }
+
+        await syncInvoicePaymentState(tx, invoiceId);
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    if (error instanceof PaymentStateError) {
+      if (error.code === "notfound") {
+        redirect("/invoices?error=notfound");
+      }
+
+      redirect(`/invoices/${invoiceId}?error=${error.code}`);
+    }
+
+    redirect(`/invoices/${invoiceId}?error=db`);
+  }
+
+  revalidatePath("/");
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
   redirect(`/invoices/${invoiceId}?paid=1`);
 }
 
-export async function cancelInvoice(invoiceId: string) {
+/**
+ * Storno ruší doklad, ne pohyb peněz. Když už úhrada přišla, musí volající
+ * říct, jestli se odběrateli vrátila — vrácení se zapíše jako záporná platba,
+ * takže se v příjmech odečte přesně tam, kde peníze reálně odešly.
+ */
+export async function cancelInvoice(invoiceId: string, formData?: FormData) {
+  const shouldRefund = formData?.get("refund") === "1";
+
+  let invoice;
+
   try {
-    const invoice = await prisma.invoice.findUnique({
+    invoice = await prisma.invoice.findUnique({
+      select: { paidAmount: true, status: true, total: true },
       where: { id: invoiceId },
-      select: { status: true },
     });
-
-    if (!invoice) {
-      redirect("/invoices?error=notfound");
-    }
-
-    if (invoice.status !== InvoiceStatus.CANCELLED) {
-      await prisma.invoice.update({
-        data: {
-          paidAt: null,
-          status: InvoiceStatus.CANCELLED,
-        },
-        where: { id: invoiceId },
-      });
-    }
   } catch {
     redirect(`/invoices/${invoiceId}?error=db`);
   }
 
+  if (!invoice) {
+    redirect("/invoices?error=notfound");
+  }
+
+  if (invoice.status === InvoiceStatus.CANCELLED) {
+    redirect(`/invoices/${invoiceId}?cancelled=1`);
+  }
+
+  const { paidCents } = getPaymentSummary(invoice);
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        // Stav se přepíná první — `resolvePaymentState` pak stornovaný doklad
+        // nepřeklopí zpátky na vystavený, jen dopočítá uhrazenou částku.
+        await tx.invoice.update({
+          data: { paidAt: null, status: InvoiceStatus.CANCELLED },
+          where: { id: invoiceId },
+        });
+
+        if (shouldRefund && paidCents > 0) {
+          await tx.invoicePayment.create({
+            data: {
+              amount: decimalFromCents(-paidCents),
+              invoiceId,
+              note: "Vrácení platby při stornu",
+              paidOn: new Date(),
+            },
+          });
+        }
+
+        await syncInvoicePaymentState(tx, invoiceId);
+      },
+      { isolationLevel: "Serializable" },
+    );
+  } catch {
+    redirect(`/invoices/${invoiceId}?error=db`);
+  }
+
+  revalidatePath("/");
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
-  redirect(`/invoices/${invoiceId}?cancelled=1`);
+  redirect(
+    `/invoices/${invoiceId}?cancelled=${shouldRefund && paidCents > 0 ? "refunded" : "1"}`,
+  );
 }
 
 export async function deleteInvoices(formData: FormData) {

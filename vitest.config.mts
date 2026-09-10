@@ -10,6 +10,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Integrační testy mají vlastní konfiguraci a potřebují databázi,
+    // proto do jednotkového běhu nepatří.
+    exclude: ["tests/integration/**"],
     include: ["tests/**/*.test.ts"],
   },
 });

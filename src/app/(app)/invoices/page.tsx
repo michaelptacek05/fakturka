@@ -10,6 +10,12 @@ import { InputField, SelectField } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate } from "@/lib/format";
+import {
+  fromCents,
+  getInvoiceVisualState,
+  getPaymentSummary,
+  type InvoiceVisualState,
+} from "@/lib/invoice-payment";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -22,55 +28,49 @@ const statusLabels: Record<string, string> = {
   [InvoiceStatus.PAID]: "Zaplaceno",
 };
 
-type VisualState = "default" | "unpaid" | "overdue" | "paid" | "cancelled";
+/**
+ * Filtr pracuje s vizuálním stavem, ne se sloupcem `status` — jinak by
+ * „Po splatnosti“ nevrátilo nic (do databáze se OVERDUE nikdy nezapisuje)
+ * a „Částečně uhrazeno“ by nešlo vyfiltrovat vůbec. Klíče zůstávají stejné
+ * jako dřív, aby odkazy typu `/invoices?status=PAID` dál fungovaly.
+ */
+const filterStates: Record<string, InvoiceVisualState> = {
+  [InvoiceStatus.CANCELLED]: "cancelled",
+  [InvoiceStatus.DRAFT]: "default",
+  [InvoiceStatus.ISSUED]: "unpaid",
+  [InvoiceStatus.OVERDUE]: "overdue",
+  [InvoiceStatus.PAID]: "paid",
+  PARTIAL: "partial",
+};
+
+/** Pořadí voleb ve výběru. Odpovídá cestě dokladu od vystavení k zaplacení. */
+const filterOrder = [
+  InvoiceStatus.DRAFT,
+  InvoiceStatus.ISSUED,
+  "PARTIAL",
+  InvoiceStatus.OVERDUE,
+  InvoiceStatus.PAID,
+  InvoiceStatus.CANCELLED,
+];
 
 /**
- * Stav po splatnosti se dopočítává z data, v databázi zůstává ISSUED.
+ * Stav po splatnosti ani částečná úhrada nejsou v databázi — dopočítávají se.
  * Štítek proto bereme z vizuálního stavu, ať barva i text říkají totéž.
  */
-const visualStateLabels: Record<VisualState, string> = {
+const visualStateLabels: Record<InvoiceVisualState, string> = {
   cancelled: statusLabels[InvoiceStatus.CANCELLED],
   default: statusLabels[InvoiceStatus.DRAFT],
   overdue: statusLabels[InvoiceStatus.OVERDUE],
   paid: statusLabels[InvoiceStatus.PAID],
+  partial: "Částečně uhrazeno",
   unpaid: statusLabels[InvoiceStatus.ISSUED],
 };
 
-function getInvoiceVisualState(invoice: {
-  dueDate: Date;
-  paidAt: Date | null;
-  status: InvoiceStatus;
-}): VisualState {
-  if (invoice.status === InvoiceStatus.CANCELLED) {
-    return "cancelled";
-  }
-
-  if (invoice.status === InvoiceStatus.PAID || invoice.paidAt !== null) {
-    return "paid";
-  }
-
-  if (invoice.status !== InvoiceStatus.ISSUED) {
-    return "default";
-  }
-
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  return invoice.dueDate < todayStart ? "overdue" : "unpaid";
-}
-
-async function getInvoices({
-  query,
-  status,
-}: {
-  query?: string;
-  status?: InvoiceStatus;
-}) {
+async function getInvoices({ query }: { query?: string }) {
   try {
     return await prisma.invoice.findMany({
       orderBy: { createdAt: "desc" },
       where: {
-        ...(status ? { status } : {}),
         // Hledáme v údajích zamrzlých na faktuře, ne v aktuálním adresáři.
         ...(query
           ? {
@@ -96,14 +96,17 @@ export default async function InvoicesPage({
   const params = await searchParams;
   const queryParam = typeof params?.q === "string" ? params.q.trim() : "";
   const statusParam = typeof params?.status === "string" ? params.status : "";
-  const statusValues = Object.values(InvoiceStatus);
-  const statusFilter = statusValues.includes(statusParam as InvoiceStatus)
-    ? (statusParam as InvoiceStatus)
-    : undefined;
-  const invoices = await getInvoices({
-    query: queryParam || undefined,
-    status: statusFilter,
-  });
+  const statusFilter = statusParam in filterStates ? statusParam : undefined;
+  const filteredState = statusFilter ? filterStates[statusFilter] : undefined;
+  const allInvoices = await getInvoices({ query: queryParam || undefined });
+  // Seznam se stejně načítá celý, takže filtrujeme až tady — stav se tím počítá
+  // jedinou funkcí a filtr nemůže říct něco jiného než štítek u řádku.
+  const invoices =
+    allInvoices === null || filteredState === undefined
+      ? allInvoices
+      : allInvoices.filter(
+          (invoice) => getInvoiceVisualState(invoice) === filteredState,
+        );
   const hasFilters = Boolean(queryParam || statusFilter);
   const deletedCount = typeof params?.deleted === "string" ? params.deleted : "";
   const bulkErrorMessage =
@@ -163,9 +166,9 @@ export default async function InvoicesPage({
                 defaultValue={statusFilter ?? ""}
               >
                 <option value="">Všechny</option>
-                {statusValues.map((value) => (
+                {filterOrder.map((value) => (
                   <option key={value} value={value}>
-                    {statusLabels[value] ?? value}
+                    {visualStateLabels[filterStates[value]]}
                   </option>
                 ))}
               </SelectField>
@@ -214,6 +217,7 @@ export default async function InvoicesPage({
         <InvoiceBulkTable
           invoices={invoices.map((invoice) => {
             const visualState = getInvoiceVisualState(invoice);
+            const summary = getPaymentSummary(invoice);
 
             return {
               clientName: invoice.clientName || "—",
@@ -222,6 +226,9 @@ export default async function InvoicesPage({
               id: invoice.id,
               issueDate: formatDate(invoice.issueDate),
               number: invoice.number,
+              remaining: summary.isPartiallyPaid
+                ? formatCurrency(fromCents(summary.remainingCents))
+                : undefined,
               statusLabel:
                 visualStateLabels[visualState] ??
                 statusLabels[invoice.status] ??

@@ -323,6 +323,21 @@ export async function importInvoices(formData: FormData) {
           : record.status === "PAID"
             ? InvoiceStatus.PAID
             : InvoiceStatus.ISSUED;
+      const totalCents = subtotalCents + vatTotalCents;
+      // Přeplatek ze zdroje osekáváme, jinak by nesedělo `paidAmount` s celkem.
+      const reportedPaidCents =
+        typeof record.paidAmount === "number" && record.paidAmount > 0
+          ? Math.min(toCents(record.paidAmount), totalCents)
+          : 0;
+      // Zdrojem pravdy o úhradách je tabulka plateb, `paidAmount` je jen cache.
+      // Importovaná faktura proto dostane platbu i tehdy, když přišla zaplacená.
+      const paidCents =
+        status === InvoiceStatus.CANCELLED
+          ? 0
+          : status === InvoiceStatus.PAID
+            ? totalCents
+            : reportedPaidCents;
+      const paidOn = paidAt ?? issueDate;
 
       await prisma.invoice.create({
         data: {
@@ -353,14 +368,27 @@ export async function importInvoices(formData: FormData) {
           },
           notes: sanitizeOptionalText(record.notes),
           number,
+          paidAmount: decimalFromCents(paidCents),
           // Zaplacené doklady bez data úhrady datujeme dnem vystavení,
           // ať se objeví ve statistikách příjmů.
-          paidAt: status === InvoiceStatus.PAID ? (paidAt ?? issueDate) : null,
+          paidAt: status === InvoiceStatus.PAID ? paidOn : null,
+          // Vnořený zápis běží ve stejné transakci jako založení faktury,
+          // takže doklad nikdy nezůstane bez odpovídající platby.
+          payments:
+            paidCents > 0
+              ? {
+                  create: {
+                    amount: decimalFromCents(paidCents),
+                    note: "Import z CSV",
+                    paidOn,
+                  },
+                }
+              : undefined,
           profileId,
           status,
           subtotal: decimalFromCents(subtotalCents),
           taxableSupplyDate: toDateOrNull(record.taxableSupplyDate),
-          total: decimalFromCents(subtotalCents + vatTotalCents),
+          total: decimalFromCents(totalCents),
           variableSymbol:
             sanitizeOptionalText(record.variableSymbol) ??
             buildVariableSymbol(number),

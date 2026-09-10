@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { InvoiceStatus, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatDateInput } from "@/lib/format";
+import { toCents } from "@/lib/invoice-payment";
 import { prisma } from "@/lib/prisma";
 import { getValidationMessage } from "@/lib/validation";
 
@@ -62,9 +63,16 @@ export default async function InvoiceEditPage({
   }
 
   const isVatPayer = invoice.profile.vatPayerStatus === VatPayerStatus.PAYER;
-  const isReadOnly =
+  const isStatusLocked =
     invoice.status === InvoiceStatus.PAID ||
     invoice.status === InvoiceStatus.CANCELLED;
+  // Změna položek by rozhodila součet už zaevidovaných úhrad, proto zamykáme
+  // i vystavenou fakturu, na které visí částečná platba.
+  const isPaymentLocked = toCents(invoice.paidAmount) > 0;
+  const isReadOnly = isStatusLocked || isPaymentLocked;
+  const readOnlyMessage = isStatusLocked
+    ? "Fakturu nelze upravovat, protože je zaplacená nebo stornovaná."
+    : "Fakturu s evidovanou úhradou už nelze upravit. Nejdřív smažte platby.";
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -81,12 +89,7 @@ export default async function InvoiceEditPage({
         }
       />
 
-      {isReadOnly ? (
-        <Alert
-          variant="warning"
-          title="Fakturu nelze upravovat, protože je zaplacená nebo stornovaná."
-        />
-      ) : null}
+      {isReadOnly ? <Alert variant="warning" title={readOnlyMessage} /> : null}
 
       {errorMessage ? (
         <Alert variant="destructive" title={errorMessage} />

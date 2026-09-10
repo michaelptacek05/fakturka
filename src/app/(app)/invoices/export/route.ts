@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { formatDate } from "@/lib/format";
+import {
+  fromCents,
+  getInvoiceVisualState,
+  getPaymentSummary,
+  toCents,
+  type InvoiceVisualState,
+} from "@/lib/invoice-payment";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +20,20 @@ const statusLabels: Record<InvoiceStatus, string> = {
   [InvoiceStatus.ISSUED]: "Vystaveno",
   [InvoiceStatus.OVERDUE]: "Po splatnosti",
   [InvoiceStatus.PAID]: "Zaplaceno",
+};
+
+/**
+ * Stav po splatnosti ani částečná úhrada nejsou v databázi — dopočítávají se.
+ * Popisky proto bereme ze stejné tabulky jako seznam faktur, ať export říká
+ * totéž, co uživatel vidí v aplikaci.
+ */
+const visualStateLabels: Record<InvoiceVisualState, string> = {
+  cancelled: statusLabels[InvoiceStatus.CANCELLED],
+  default: statusLabels[InvoiceStatus.DRAFT],
+  overdue: statusLabels[InvoiceStatus.OVERDUE],
+  paid: statusLabels[InvoiceStatus.PAID],
+  partial: "Částečně uhrazeno",
+  unpaid: statusLabels[InvoiceStatus.ISSUED],
 };
 
 function csvCell(value: string | number | null | undefined) {
@@ -74,22 +95,32 @@ export async function GET(request: Request) {
       "Mezisoučet",
       "DPH",
       "Celkem",
+      "Uhrazeno",
+      "Zbývá",
       "Variabilní symbol",
     ],
-    ...invoices.map((invoice) => [
-      invoice.number,
-      invoice.clientName,
-      invoice.clientIco ?? "",
-      invoice.clientDic ?? "",
-      formatDate(invoice.issueDate),
-      formatDate(invoice.dueDate),
-      statusLabels[invoice.status],
-      invoice.currency,
-      invoice.subtotal.toString(),
-      invoice.vatTotal.toString(),
-      invoice.total.toString(),
-      invoice.variableSymbol,
-    ]),
+    ...invoices.map((invoice) => {
+      const summary = getPaymentSummary(invoice);
+
+      return [
+        invoice.number,
+        invoice.clientName,
+        invoice.clientIco ?? "",
+        invoice.clientDic ?? "",
+        formatDate(invoice.issueDate),
+        formatDate(invoice.dueDate),
+        visualStateLabels[getInvoiceVisualState(invoice)],
+        invoice.currency,
+        // Všechny částky na dvě desetinná místa — Decimal.toString() by
+        // u celých čísel vrátil "9000" vedle "3500.00" ve stejném řádku.
+        fromCents(toCents(invoice.subtotal)).toFixed(2),
+        fromCents(toCents(invoice.vatTotal)).toFixed(2),
+        fromCents(summary.totalCents).toFixed(2),
+        fromCents(summary.paidCents).toFixed(2),
+        fromCents(summary.remainingCents).toFixed(2),
+        invoice.variableSymbol,
+      ];
+    }),
   ];
   const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
   const body = `\uFEFF${csv}\n`;
