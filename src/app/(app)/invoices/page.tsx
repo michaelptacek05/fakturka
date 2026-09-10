@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FilePlus2, FileText, Search } from "lucide-react";
+import { FilePlus2, Search } from "lucide-react";
 
 import { InvoiceBulkTable } from "@/components/invoices/invoice-bulk-table";
 import { Alert } from "@/components/ui/alert";
@@ -191,7 +191,6 @@ export default async function InvoicesPage({
       {invoices !== null && invoices.length === 0 ? (
         <Card>
           <EmptyState
-            icon={FileText}
             title={hasFilters ? "Nic nenalezeno" : "Zatím žádné faktury"}
             description={
               hasFilters

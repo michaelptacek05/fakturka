@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderKanban, FolderPlus } from "lucide-react";
+import { FolderPlus } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -112,7 +112,6 @@ export default async function ProjectsPage({
       ) : projects.length === 0 ? (
         <Card>
           <EmptyState
-            icon={FolderKanban}
             title="Zatím žádné projekty"
             description="Založte projekt pod odběratelem a začněte si k němu psát úkoly."
             action={

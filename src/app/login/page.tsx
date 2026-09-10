@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { KeyRound, ReceiptText } from "lucide-react";
+import { KeyRound } from "lucide-react";
 
 import { signIn } from "@/app/login/actions";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { InputField } from "@/components/ui/field";
 import { isAuthEnabled, sanitizeRedirectPath } from "@/lib/auth";
 
@@ -43,49 +42,69 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const errorMessage = getErrorMessage(params.error);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <ReceiptText className="size-6" aria-hidden="true" />
+    <div className="grid min-h-screen lg:grid-cols-2">
+      {/*
+        Zelený panel drží identitu aplikace i tam, kde ještě není sidebar.
+        Na úzkých displejích se schová, ať zbyde místo na formulář.
+      */}
+      <div className="hidden flex-col justify-between bg-sidebar p-12 lg:flex">
+        <div className="flex flex-col gap-1">
+          <span className="text-xl font-semibold tracking-[-0.02em] text-sidebar-primary">
+            Fakturka
           </span>
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">Fakturka</h1>
+          <span className="text-sm text-sidebar-muted">Fakturace OSVČ</span>
+        </div>
+
+        <p className="max-w-sm text-[1.375rem] font-medium leading-snug tracking-[-0.015em] text-sidebar-primary">
+          Faktury, odběratelé a odvody. Na vlastním serveru, bez měsíčního
+          poplatku.
+        </p>
+
+        <p className="text-xs text-sidebar-muted">
+          Self-hosted fakturace pro české OSVČ.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-center px-4 py-12 sm:px-8">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="space-y-2">
+            <span className="text-lg font-semibold tracking-[-0.02em] lg:hidden">
+              Fakturka
+            </span>
+            <h1 className="text-[1.75rem] font-semibold leading-tight">
+              Přihlášení
+            </h1>
             <p className="text-sm text-muted-foreground">
               Zadejte heslo pro přístup k fakturaci.
             </p>
           </div>
+
+          {errorMessage ? (
+            <Alert variant="destructive" title={errorMessage} />
+          ) : null}
+
+          <form action={signIn} className="space-y-5">
+            <input type="hidden" name="next" value={nextPath} />
+
+            <InputField
+              label="Heslo"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              autoFocus
+              required
+            />
+
+            <Button type="submit" className="w-full">
+              <KeyRound className="size-4" aria-hidden="true" />
+              Přihlásit se
+            </Button>
+          </form>
+
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Heslo se nastavuje proměnnou prostředí AUTH_PASSWORD.
+          </p>
         </div>
-
-        <Card>
-          <CardContent className="space-y-4">
-            {errorMessage ? (
-              <Alert variant="destructive" title={errorMessage} />
-            ) : null}
-
-            <form action={signIn} className="space-y-4">
-              <input type="hidden" name="next" value={nextPath} />
-
-              <InputField
-                label="Heslo"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                autoFocus
-                required
-              />
-
-              <Button type="submit" className="w-full">
-                <KeyRound className="size-4" aria-hidden="true" />
-                Přihlásit se
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <p className="text-center text-xs text-muted-foreground">
-          Heslo se nastavuje proměnnou prostředí AUTH_PASSWORD.
-        </p>
       </div>
     </div>
   );

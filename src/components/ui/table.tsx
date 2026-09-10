@@ -7,7 +7,7 @@ function TableWrapper({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="table-wrapper"
-      className={cn("w-full overflow-x-auto", className)}
+      className={cn("scrollbar-slim w-full overflow-x-auto", className)}
       {...props}
     />
   );
@@ -23,11 +23,18 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   );
 }
 
+/**
+ * Hlavička se odliší vlastní světlou plochou. Linku má jen dole — horní by se
+ * sečetla s rámem karty nebo s patičkou hlavičky karty do dvoupixelového pruhu.
+ */
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_th]:border-b [&_th]:border-border", className)}
+      className={cn(
+        "bg-muted/60 [&_th]:border-b [&_th]:border-border",
+        className,
+      )}
       {...props}
     />
   );
@@ -60,7 +67,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       data-slot="table-row"
-      className={cn("transition-colors hover:bg-muted/50", className)}
+      className={cn("transition-colors hover:bg-muted/45", className)}
       {...props}
     />
   );
@@ -71,7 +78,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "px-4 py-2.5 text-left align-middle text-xs font-medium uppercase tracking-wide text-muted-foreground",
+        "text-eyebrow px-4 py-2.5 text-left align-middle text-muted-foreground",
         className,
       )}
       {...props}
@@ -83,7 +90,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
       data-slot="table-cell"
-      className={cn("px-4 py-3 align-middle", className)}
+      className={cn("px-4 py-3.5 align-middle", className)}
       {...props}
     />
   );

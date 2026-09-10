@@ -153,7 +153,7 @@ export function ClientForm({ clientId, defaultValues }: ClientFormProps) {
             }
           }}
         >
-          <Button type="submit" variant="destructive" size="sm">
+          <Button type="submit" variant="destructive-outline" size="sm">
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat odběratele
           </Button>

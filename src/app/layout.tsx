@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import { themeInitScript } from "@/components/layout/theme-toggle";
 
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/**
+ * Helvetica Neue se nedá legálně přibalit, takže se bere ze systému. Inter je
+ * self-hostovaný fallback pro Windows a Linux — latin-ext kvůli české diakritice.
+ */
+const inter = Inter({
+  display: "swap",
   subsets: ["latin", "latin-ext"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin", "latin-ext"],
+  variable: "--font-inter",
 });
 
 export const metadata: Metadata = {
@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="cs"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

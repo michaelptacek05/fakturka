@@ -180,7 +180,7 @@ export function TaskBoard({ showProject = true, tasks }: TaskBoardProps) {
                       handleDrop(event, { beforeTaskId: task.id, status });
                     }}
                     className={cn(
-                      "group rounded-lg border border-border bg-card p-3 shadow-xs transition-all",
+                      "group rounded-lg border border-border bg-card p-3 transition-all",
                       draggedId === task.id && "opacity-40",
                       isCardTarget && "ring-2 ring-primary/60",
                     )}

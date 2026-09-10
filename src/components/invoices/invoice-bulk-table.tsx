@@ -86,7 +86,7 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
   return (
     <form
       action={deleteInvoices}
-      className="overflow-hidden rounded-xl border border-border bg-card shadow-xs"
+      className="overflow-hidden rounded-xl border border-border bg-card"
       onSubmit={(event) => {
         if (selectedCount === 0) {
           event.preventDefault();
@@ -121,9 +121,10 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
               Export CSV
             </Link>
           </Button>
+          {/* Plná destruktivní barva až ve chvíli, kdy je co mazat. */}
           <Button
             type="submit"
-            variant="destructive"
+            variant={selectedCount === 0 ? "outline" : "destructive"}
             size="sm"
             disabled={selectedCount === 0}
           >
@@ -185,13 +186,13 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
                   </Link>
                 </TableCell>
                 <TableCell>{invoice.clientName}</TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="tabular-nums text-muted-foreground">
                   {invoice.issueDate}
                 </TableCell>
-                <TableCell className="text-muted-foreground">
+                <TableCell className="tabular-nums text-muted-foreground">
                   {invoice.dueDate}
                 </TableCell>
-                <TableCell className="text-right font-medium">
+                <TableCell className="text-right font-medium tabular-nums">
                   {invoice.total}
                   {invoice.remaining ? (
                     <span className="block text-xs font-normal text-muted-foreground">
@@ -200,7 +201,7 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
                   ) : null}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={badgeVariant[invoice.visualState]}>
+                  <Badge dot variant={badgeVariant[invoice.visualState]}>
                     {invoice.statusLabel}
                   </Badge>
                 </TableCell>

@@ -8,7 +8,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea
       data-slot="textarea"
-      className={cn(inputClassName, "min-h-20 h-auto py-2", className)}
+      className={cn(inputClassName, "h-auto min-h-20 py-2.5", className)}
       {...props}
     />
   );

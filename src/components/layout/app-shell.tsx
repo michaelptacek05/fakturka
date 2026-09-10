@@ -1,80 +1,64 @@
-import Link from "next/link";
-import { LogOut, ReceiptText, ShieldAlert } from "lucide-react";
+import { LogOut, ShieldAlert } from "lucide-react";
 
 import { signOut } from "@/app/login/actions";
-import { MainNav } from "@/components/layout/main-nav";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { Button } from "@/components/ui/button";
+import { AppNav } from "@/components/layout/app-nav";
 import { isAuthEnabled } from "@/lib/auth";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const authEnabled = isAuthEnabled();
 
+  /*
+   * Odhlašovací formulář se vykresluje tady, aby zůstal serverovou akcí,
+   * a do navigace se předává jako slot. Barvy jsou sidebarové, ne obecné —
+   * ghost tlačítko by na tmavě zeleném podkladu zmizelo.
+   */
+  const signOutSlot = authEnabled ? (
+    <form action={signOut}>
+      <button
+        className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40"
+        type="submit"
+      >
+        <LogOut aria-hidden="true" className="size-4 text-sidebar-muted" />
+        Odhlásit se
+      </button>
+    </form>
+  ) : null;
+
   return (
-    <div className="flex min-h-screen flex-col">
-      {!authEnabled ? (
-        <div
-          role="alert"
-          className="print-hidden flex items-center justify-center gap-2 bg-destructive px-4 py-2 text-center text-sm font-medium text-destructive-foreground"
-        >
-          <ShieldAlert className="size-4 shrink-0" aria-hidden="true" />
-          <span>
-            Aplikace běží bez přihlášení. Nastavte proměnnou{" "}
-            <code className="font-mono">AUTH_PASSWORD</code> a restartujte
-            kontejner.
-          </span>
+    <div className="min-h-screen bg-background">
+      <AppNav signOutSlot={signOutSlot} />
+
+      <div className="lg:pl-64 print:pl-0">
+        <div className="pt-14 print:pt-0">
+          {!authEnabled ? (
+            <div
+              className="print-hidden flex items-start justify-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-foreground sm:px-6 lg:px-8"
+              role="alert"
+            >
+              <ShieldAlert
+                aria-hidden="true"
+                className="mt-0.5 size-4 shrink-0 text-destructive"
+              />
+              <span>
+                Aplikace běží bez přihlášení. Nastavte proměnnou{" "}
+                <code className="font-mono text-[0.8125rem]">
+                  AUTH_PASSWORD
+                </code>{" "}
+                a restartujte kontejner.
+              </span>
+            </div>
+          ) : null}
+
+          <main>{children}</main>
         </div>
-      ) : null}
 
-      <header className="print-hidden sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
-          <Link
-            href="/"
-            className="mr-auto flex items-center gap-2.5 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/45"
-          >
-            <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <ReceiptText className="size-5" aria-hidden="true" />
-            </span>
-            <span className="flex flex-col leading-tight">
-              <span className="text-base font-semibold tracking-tight">
-                Fakturka
-              </span>
-              <span className="hidden text-xs text-muted-foreground sm:block">
-                Self-hosted fakturace OSVČ
-              </span>
-            </span>
-          </Link>
-
-          <MainNav />
-
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-
-            {authEnabled ? (
-              <form action={signOut}>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Odhlásit se"
-                  title="Odhlásit se"
-                >
-                  <LogOut className="size-4" aria-hidden="true" />
-                </Button>
-              </form>
-            ) : null}
+        <footer className="print-hidden border-t border-border">
+          <div className="mx-auto w-full max-w-7xl px-4 py-6 text-xs text-muted-foreground sm:px-6 lg:px-8">
+            Fakturka — self-hosted fakturace pro české OSVČ. Aplikace nenahrazuje
+            účetní ani daňové poradenství.
           </div>
-        </div>
-      </header>
-
-      <main className="flex-1">{children}</main>
-
-      <footer className="print-hidden border-t border-border py-6">
-        <div className="mx-auto w-full max-w-7xl px-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
-          Fakturka — self-hosted fakturace pro české OSVČ. Aplikace nenahrazuje
-          účetní ani daňové poradenství.
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FolderPlus, ListTodo, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { TaskBoard, type BoardTask } from "@/components/tasks/task-board";
 import { TaskCreateForm } from "@/components/tasks/task-create-form";
@@ -167,7 +167,6 @@ export default async function TasksPage({
       {projects !== null && projects.length === 0 ? (
         <Card>
           <EmptyState
-            icon={FolderPlus}
             title="Nejdřív potřebujete projekt"
             description="Úkoly se zadávají pod projekt. Založte první projekt a vraťte se sem."
             action={
@@ -234,7 +233,6 @@ export default async function TasksPage({
           {boardTasks.length === 0 ? (
             <Card>
               <EmptyState
-                icon={ListTodo}
                 title={hasFilters ? "Nic nenalezeno" : "Zatím žádné úkoly"}
                 description={
                   hasFilters

@@ -304,7 +304,7 @@ export default async function TaskDetailPage({
         className="flex justify-end"
         message="Opravdu chcete úkol smazat? Zmizí i jeho poznámky."
       >
-        <Button type="submit" variant="destructive" size="sm">
+        <Button type="submit" variant="destructive-outline" size="sm">
           <Trash2 className="size-4" aria-hidden="true" />
           Smazat úkol
         </Button>

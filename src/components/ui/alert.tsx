@@ -10,15 +10,19 @@ import {
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Barevný pruh vlevo místo barevného rámu dokola — hlášku odliší, ale nerozbije
+ * mřížku stránky tím, že by z ní udělal další zvýrazněnou kartu.
+ */
 const alertVariants = cva(
-  "flex items-start gap-3 rounded-lg border px-4 py-3 text-sm",
+  "flex items-start gap-3 rounded-lg border border-border border-l-2 bg-card px-4 py-3 text-sm",
   {
     variants: {
       variant: {
-        info: "border-primary/25 bg-primary/8 text-foreground",
-        success: "border-success/30 bg-success/10 text-foreground",
-        warning: "border-warning/35 bg-warning/12 text-foreground",
-        destructive: "border-destructive/30 bg-destructive/10 text-foreground",
+        info: "border-l-primary",
+        success: "border-l-success",
+        warning: "border-l-warning",
+        destructive: "border-l-destructive",
       },
     },
     defaultVariants: {
@@ -66,7 +70,7 @@ function Alert({
       <div className="min-w-0 space-y-1">
         {title ? <p className="font-medium">{title}</p> : null}
         {children ? (
-          <div className="text-muted-foreground [&_a]:font-medium [&_a]:text-foreground [&_a]:underline">
+          <div className="text-muted-foreground [&_a]:font-medium [&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4">
             {children}
           </div>
         ) : null}

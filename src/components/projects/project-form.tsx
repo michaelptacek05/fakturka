@@ -198,7 +198,7 @@ export function ProjectForm({
             }
           }}
         >
-          <Button type="submit" variant="destructive" size="sm">
+          <Button type="submit" variant="destructive-outline" size="sm">
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat projekt
           </Button>

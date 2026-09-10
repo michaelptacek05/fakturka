@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Download, UserPlus, Users } from "lucide-react";
+import { Download, UserPlus } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -106,7 +106,6 @@ export default async function ClientsPage({
       ) : clients.length === 0 ? (
         <Card>
           <EmptyState
-            icon={Users}
             title="Zatím žádní odběratelé"
             description="Přidejte prvního odběratele ručně, nebo naimportujte adresář z Fakturoidu."
             action={

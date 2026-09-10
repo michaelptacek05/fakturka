@@ -1,4 +1,4 @@
-import { Plus, Trash2, Wallet } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 import { addInvoicePayment, deleteInvoicePayment } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -85,7 +85,6 @@ export function InvoicePaymentsCard({
         {payments.length === 0 ? (
           <EmptyState
             className="py-8"
-            icon={Wallet}
             title="Zatím žádná úhrada"
             description={
               canAddPayment

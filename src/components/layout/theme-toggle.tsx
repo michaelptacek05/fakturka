@@ -3,8 +3,6 @@
 import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-
 export const THEME_STORAGE_KEY = "fakturka-theme";
 
 /**
@@ -56,21 +54,20 @@ export function ThemeToggle() {
   }
 
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon-sm"
-      onClick={toggleTheme}
+    <button
       aria-label={
         isDark ? "Přepnout na světlý motiv" : "Přepnout na tmavý motiv"
       }
+      className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
+      onClick={toggleTheme}
       title={isDark ? "Světlý motiv" : "Tmavý motiv"}
+      type="button"
     >
       {isDark ? (
-        <Sun className="size-4" aria-hidden="true" />
+        <Sun aria-hidden="true" className="size-4" />
       ) : (
-        <Moon className="size-4" aria-hidden="true" />
+        <Moon aria-hidden="true" className="size-4" />
       )}
-    </Button>
+    </button>
   );
 }

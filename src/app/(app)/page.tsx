@@ -1,16 +1,5 @@
 import Link from "next/link";
-import {
-  ArrowRight,
-  BarChart3,
-  CreditCard,
-  FilePlus2,
-  FileText,
-  Gauge,
-  PiggyBank,
-  ReceiptText,
-  TriangleAlert,
-  Users,
-} from "lucide-react";
+import { ArrowRight, FilePlus2, Users } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatCard } from "@/components/ui/stat-card";
 import {
   Table,
   TableBody,
@@ -123,7 +113,7 @@ export default async function Home() {
     : null;
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
       <PageHeader
         title="Přehled"
         description="Příjmy, nezaplacené doklady a orientační odvody na jednom místě."
@@ -152,50 +142,25 @@ export default async function Home() {
       ) : (
         <>
           <section className="grid gap-4 md:grid-cols-3">
-            {[
-              {
-                detail: `${dashboard.metrics.month.count} faktur s úhradou`,
-                icon: CreditCard,
-                label: "Tento měsíc",
-                value: formatCurrency(dashboard.metrics.month.total),
-              },
-              {
-                detail: `${dashboard.metrics.quarter.count} faktur s úhradou`,
-                icon: BarChart3,
-                label: "Tento kvartál",
-                value: formatCurrency(dashboard.metrics.quarter.total),
-              },
-              {
-                detail: `${dashboard.metrics.year.count} faktur s úhradou`,
-                icon: Gauge,
-                label: "Tento rok",
-                value: formatCurrency(dashboard.metrics.year.total),
-              },
-            ].map((metric) => (
-              <Card key={metric.label}>
-                <CardContent className="space-y-1">
-                  <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      {metric.label}
-                    </p>
-                    <metric.icon
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="pt-2 text-2xl font-semibold tracking-tight">
-                    {metric.value}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {metric.detail}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+            <StatCard
+              detail={`${dashboard.metrics.month.count} faktur s úhradou`}
+              label="Tento měsíc"
+              value={formatCurrency(dashboard.metrics.month.total)}
+            />
+            <StatCard
+              detail={`${dashboard.metrics.quarter.count} faktur s úhradou`}
+              label="Tento kvartál"
+              value={formatCurrency(dashboard.metrics.quarter.total)}
+            />
+            <StatCard
+              detail={`${dashboard.metrics.year.count} faktur s úhradou`}
+              label="Tento rok"
+              value={formatCurrency(dashboard.metrics.year.total)}
+            />
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-            <Card>
+          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <Card className="flex flex-col">
               <CardHeader className="flex-row items-start justify-between gap-4">
                 <div className="space-y-1">
                   <CardTitle>Vývoj příjmů</CardTitle>
@@ -211,8 +176,8 @@ export default async function Home() {
                 </Button>
               </CardHeader>
 
-              <CardContent>
-                <div className="grid h-64 grid-cols-12 items-end gap-1.5 border-b border-l border-border pb-7 pl-2">
+              <CardContent className="flex flex-1 flex-col p-5 pb-3">
+                <div className="grid min-h-56 flex-1 grid-cols-12 items-end gap-1.5 border-b border-border pb-8">
                   {dashboard.monthlyRevenue.map((month) => {
                     const height =
                       dashboard.maxMonthlyRevenue > 0
@@ -228,13 +193,15 @@ export default async function Home() {
                         key={month.key}
                       >
                         <div
-                          className={`w-full rounded-t-sm transition-all ${
-                            month.total > 0 ? "bg-chart-1" : "bg-muted"
+                          className={`w-full rounded-t-[3px] transition-colors ${
+                            month.total > 0
+                              ? "bg-chart-1 hover:bg-primary"
+                              : "bg-border"
                           }`}
                           style={{ height: `${height}%` }}
                           title={`${month.label}: ${formatCurrency(month.total)}`}
                         />
-                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[11px] text-muted-foreground">
+                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[11px] tabular-nums text-muted-foreground">
                           {month.label}
                         </span>
                       </div>
@@ -245,108 +212,72 @@ export default async function Home() {
             </Card>
 
             <div className="flex flex-col gap-4">
-              <Card
-                className={
-                  dashboard.metrics.overdue.count > 0
-                    ? "border-destructive/40"
-                    : undefined
+              <StatCard
+                detail={
+                  dashboard.metrics.overdue.count === 0
+                    ? "Nic po splatnosti"
+                    : `Zbývá doinkasovat u ${dashboard.metrics.overdue.count} faktur`
                 }
-              >
-                <CardContent className="space-y-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Po splatnosti
-                    </p>
-                    <TriangleAlert
-                      className={`size-4 ${
-                        dashboard.metrics.overdue.count > 0
-                          ? "text-destructive"
-                          : "text-muted-foreground"
-                      }`}
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="pt-2 text-2xl font-semibold tracking-tight">
-                    {formatCurrency(dashboard.metrics.overdue.total)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {dashboard.metrics.overdue.count === 0
-                      ? "Nic po splatnosti"
-                      : `Zbývá doinkasovat u ${dashboard.metrics.overdue.count} faktur`}
-                  </p>
-                  {dashboard.metrics.overdue.count > 0 ? (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="mt-3 w-full"
-                    >
+                footer={
+                  dashboard.metrics.overdue.count > 0 ? (
+                    <Button asChild className="w-full" size="sm" variant="outline">
                       <Link href="/invoices?status=OVERDUE">
                         Projít po splatnosti
                       </Link>
                     </Button>
-                  ) : null}
-                </CardContent>
-              </Card>
+                  ) : null
+                }
+                label="Po splatnosti"
+                tone={
+                  dashboard.metrics.overdue.count > 0 ? "attention" : "default"
+                }
+                value={formatCurrency(dashboard.metrics.overdue.total)}
+              />
+
+              <StatCard
+                detail={`Zbývá doinkasovat u ${dashboard.metrics.unpaid.count} vystavených faktur`}
+                label="Nezaplaceno"
+                value={formatCurrency(dashboard.metrics.unpaid.total)}
+              />
 
               <Card>
-                <CardContent className="space-y-1">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Nezaplaceno
-                    </p>
-                    <ReceiptText
-                      className="size-4 text-muted-foreground"
-                      aria-hidden="true"
-                    />
-                  </div>
-                  <p className="pt-2 text-2xl font-semibold tracking-tight">
-                    {formatCurrency(dashboard.metrics.unpaid.total)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Zbývá doinkasovat u {dashboard.metrics.unpaid.count}{" "}
-                    vystavených faktur
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="space-y-3">
-                  <p className="text-sm font-medium text-muted-foreground">
+                <CardContent className="space-y-3 p-5">
+                  <p className="text-eyebrow text-muted-foreground">
                     Limit pro plátcovství DPH
                   </p>
+                  <p className="text-lg font-semibold leading-none tabular-nums">
+                    {formatCurrency(dashboard.metrics.vatLimit.total)}
+                    <span className="font-normal text-muted-foreground">
+                      {" "}
+                      / {formatCurrency(dashboard.metrics.vatLimit.limit)}
+                    </span>
+                  </p>
                   <div
-                    className="h-2 overflow-hidden rounded-full bg-muted"
+                    aria-label={`Využito ${Math.round(dashboard.metrics.vatLimit.percentage)} procent limitu`}
+                    className="h-1.5 overflow-hidden rounded-full bg-muted"
                     role="img"
-                    aria-label={`Využito ${dashboard.metrics.vatLimit.percentage} procent limitu`}
                   >
                     <div
-                      className={`h-full ${
+                      className={`h-full rounded-full ${
                         dashboard.metrics.vatLimit.percentage > 80
                           ? "bg-destructive"
-                          : "bg-success"
+                          : "bg-primary"
                       }`}
                       style={{
                         width: `${dashboard.metrics.vatLimit.percentage}%`,
                       }}
                     />
                   </div>
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-muted-foreground">12 měsíců</span>
-                    <span className="font-medium">
-                      {formatCurrency(dashboard.metrics.vatLimit.total)} /{" "}
-                      {formatCurrency(dashboard.metrics.vatLimit.limit)}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Zbývá {formatCurrency(dashboard.metrics.vatLimit.remaining)}.
+                  <p className="text-[0.8125rem] text-muted-foreground">
+                    Za 12 měsíců. Zbývá{" "}
+                    {formatCurrency(dashboard.metrics.vatLimit.remaining)}.
                   </p>
                 </CardContent>
               </Card>
             </div>
           </section>
 
-          <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <section className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
             <Card className="overflow-hidden">
               <CardHeader className="flex-row items-start justify-between gap-4">
                 <div className="space-y-1">
@@ -362,7 +293,6 @@ export default async function Home() {
 
               {dashboard.recentInvoices.length === 0 ? (
                 <EmptyState
-                  icon={FileText}
                   title="Zatím žádné faktury"
                   description="Po vystavení první faktury se tady objeví poslední doklady."
                   action={
@@ -388,38 +318,41 @@ export default async function Home() {
                         const summary = getPaymentSummary(invoice);
 
                         return (
-                        <TableRow key={invoice.id}>
-                          <TableCell className="font-medium">
-                            <Link
-                              className="underline-offset-4 hover:underline"
-                              href={`/invoices/${invoice.id}`}
-                            >
-                              {invoice.number}
-                            </Link>
-                          </TableCell>
-                          <TableCell>{invoice.clientName}</TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {formatDate(invoice.dueDate)}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {formatCurrency(invoice.total)}
-                            {summary.isPartiallyPaid ? (
-                              <span className="block text-xs font-normal text-muted-foreground">
-                                Zbývá{" "}
-                                {formatCurrency(
-                                  fromCents(summary.remainingCents),
-                                )}
-                              </span>
-                            ) : null}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={visualStateVariants[invoice.visualState]}
-                            >
-                              {visualStateLabels[invoice.visualState]}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
+                          <TableRow key={invoice.id}>
+                            <TableCell className="font-medium">
+                              <Link
+                                className="underline-offset-4 hover:underline"
+                                href={`/invoices/${invoice.id}`}
+                              >
+                                {invoice.number}
+                              </Link>
+                            </TableCell>
+                            <TableCell>{invoice.clientName}</TableCell>
+                            <TableCell className="tabular-nums text-muted-foreground">
+                              {formatDate(invoice.dueDate)}
+                            </TableCell>
+                            <TableCell className="text-right font-medium tabular-nums">
+                              {formatCurrency(invoice.total)}
+                              {summary.isPartiallyPaid ? (
+                                <span className="block text-xs font-normal text-muted-foreground">
+                                  Zbývá{" "}
+                                  {formatCurrency(
+                                    fromCents(summary.remainingCents),
+                                  )}
+                                </span>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                dot
+                                variant={
+                                  visualStateVariants[invoice.visualState]
+                                }
+                              >
+                                {visualStateLabels[invoice.visualState]}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
                         );
                       })}
                     </TableBody>
@@ -430,13 +363,7 @@ export default async function Home() {
 
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <PiggyBank
-                    className="size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <CardTitle>Odhad odvodů</CardTitle>
-                </div>
+                <CardTitle>Odhad odvodů</CardTitle>
                 <CardDescription>
                   {dashboard.estimate.isSecondary
                     ? "Vedlejší činnost. Doplácí se najednou po podání přiznání a přehledů."
@@ -444,15 +371,15 @@ export default async function Home() {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-5">
+              <CardContent className="space-y-5 p-5">
                 <div className="rounded-lg border border-border bg-muted/50 p-4">
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-eyebrow text-muted-foreground">
                     Odhad k doplacení
                   </p>
-                  <p className="pt-1 text-2xl font-semibold tracking-tight">
+                  <p className="pt-1.5 text-2xl font-semibold leading-none tracking-tight">
                     {formatCurrency(dashboard.estimate.total)}
                   </p>
-                  <p className="pt-1 text-xs text-muted-foreground">
+                  <p className="pt-2 text-xs leading-relaxed text-muted-foreground">
                     Ze základu {formatCurrency(dashboard.estimate.taxBase)} po
                     odečtení {formatCurrency(dashboard.estimate.flatExpenses)}{" "}
                     paušálních výdajů.
@@ -483,14 +410,14 @@ export default async function Home() {
                         <dd
                           className={
                             row.amount === 0
-                              ? "font-medium text-success"
-                              : "font-medium"
+                              ? "font-medium tabular-nums text-success"
+                              : "font-medium tabular-nums"
                           }
                         >
                           {formatCurrency(row.amount)}
                         </dd>
                       </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                         {row.note}
                       </p>
                     </div>
@@ -505,13 +432,13 @@ export default async function Home() {
                       dashboard.estimate.social.remainingToThreshold,
                     )} zisku`}
                   >
-                    Po jejím překročení se sociální pojistné začne platit
-                    zpětně za celý rok.
+                    Po jejím překročení se sociální pojistné začne platit zpětně
+                    za celý rok.
                   </Alert>
                 ) : null}
 
                 <details className="text-xs text-muted-foreground">
-                  <summary className="cursor-pointer font-medium">
+                  <summary className="cursor-pointer font-medium text-foreground">
                     Co odhad neumí
                   </summary>
                   <ul className="mt-2 list-disc space-y-1 pl-4">
@@ -522,8 +449,8 @@ export default async function Home() {
                   <p className="mt-2">
                     Sazby a částky si nastavíš v{" "}
                     <Link
-                      href="/settings/profile"
                       className="underline underline-offset-4"
+                      href="/settings/profile"
                     >
                       profilu
                     </Link>
