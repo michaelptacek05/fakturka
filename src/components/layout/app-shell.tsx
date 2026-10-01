@@ -25,7 +25,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ) : null;
 
   return (
-    <div className="min-h-screen bg-background">
+    // V tisku by `min-h-screen` natáhl podklad do konce stránky a pod fakturou
+    // by zůstal pruh barvy plátna — v tmavém motivu skoro černý.
+    <div className="min-h-screen bg-background print:min-h-0 print:bg-white">
       <AppNav signOutSlot={signOutSlot} />
 
       <div className="lg:pl-64 print:pl-0">

@@ -60,6 +60,10 @@ ENV HOSTNAME=0.0.0.0
 # že se datum vystavení ani splatnosti neposune o den.
 ENV TZ=UTC
 
+# Alpine nemá žádný TTF font. PDF by spadlo na Helvetiku, která neumí
+# českou diakritiku (č, ř, ě, ů) — DejaVu ji pokrývá celou.
+RUN apk add --no-cache font-dejavu
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 RUN mkdir -p /app/storage/invoice-assets && chown -R nextjs:nodejs /app/storage

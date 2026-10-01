@@ -389,9 +389,11 @@ export async function importInvoices(formData: FormData) {
           subtotal: decimalFromCents(subtotalCents),
           taxableSupplyDate: toDateOrNull(record.taxableSupplyDate),
           total: decimalFromCents(totalCents),
-          variableSymbol:
-            sanitizeOptionalText(record.variableSymbol) ??
-            buildVariableSymbol(number),
+          // I převzatý VS musí projít ořezem na deset číslic, jinak by se
+          // vytištěný symbol rozešel s tím, co appka vloží do QR platby.
+          variableSymbol: buildVariableSymbol(
+            sanitizeOptionalText(record.variableSymbol) ?? number,
+          ),
           vatTotal: decimalFromCents(vatTotalCents),
         },
       });

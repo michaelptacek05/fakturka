@@ -73,6 +73,8 @@ const FONT_CANDIDATES = [
   "/Library/Fonts/Arial Unicode.ttf",
   "/System/Library/Fonts/Supplemental/Arial.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+  // Alpine (produkční image) — balíček font-dejavu.
+  "/usr/share/fonts/dejavu/DejaVuSans.ttf",
 ];
 
 /** Vodorovné hranice sazby — A4 s okrajem 40 bodů. */

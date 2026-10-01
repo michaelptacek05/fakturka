@@ -246,7 +246,12 @@ export function buildSpaydPayload({
     `AM:${amountValue.toFixed(2)}`,
     `CC:${currency.toUpperCase()}`,
   ];
-  const normalizedVariableSymbol = variableSymbol?.replace(/\D/g, "");
+  // VS má ve SPAYD limit deset číslic. Faktury z appky ho mají ořezaný už
+  // z buildVariableSymbol, import cizích dat ale VS přebírá beze změny —
+  // delší symbol by banka odmítla, proto stejný ořez jako u čísla faktury.
+  const normalizedVariableSymbol = variableSymbol
+    ?.replace(/\D/g, "")
+    .slice(-10);
 
   if (dueDate) {
     const formattedDueDate = formatSpaydDate(dueDate);
