@@ -102,6 +102,27 @@ const SPAYD_FONT_SIZE = 4.5;
 const STAMP_FIT: [number, number] = [95, 75];
 const STAMP_X = 445;
 const TOTALS_ROW_HEIGHT = 24;
+/**
+ * Sloupce tabulky položek. Neplátce sloupec DPH nemá, uvolněné místo
+ * dostane název položky, aby se dlouhé názvy méně zalamovaly.
+ */
+const ITEM_COLUMNS = {
+  nonPayer: {
+    name: { width: 265, x: 40 },
+    quantity: { width: 70, x: 310 },
+    total: { width: 80, x: 475 },
+    unitPrice: { width: 75, x: 390 },
+    vat: null,
+  },
+  payer: {
+    name: { width: 210, x: 40 },
+    quantity: { width: 70, x: 255 },
+    total: { width: 80, x: 475 },
+    unitPrice: { width: 75, x: 335 },
+    vat: { width: 45, x: 420 },
+  },
+};
+type ItemColumns = (typeof ITEM_COLUMNS)[keyof typeof ITEM_COLUMNS];
 /** Kam patička sedne u krátké faktury, aby stránka nebyla nahoře přeplácaná. */
 const PREFERRED_FOOTER_TOP = 590;
 /**
@@ -112,6 +133,10 @@ const PREFERRED_FOOTER_TOP = 590;
 const FOOTER_BOTTOM_GAP = 6;
 /** Odstup poznámky od nejnižšího prvku patičky. */
 const NOTES_GAP = 12;
+/** Řádek s daty pod adresami, pokud se adresy vejdou do běžné výšky. */
+const DEFAULT_DATES_TOP = 280;
+/** Odstup řádku s daty od posledního řádku adresy (vč. linky mezi nimi). */
+const DATES_GAP = 28;
 const PAID_WITHOUT_QR_TEXT = "Faktura je uhrazená, QR platba se proto netiskne.";
 
 function resolveFont() {
@@ -167,11 +192,16 @@ function drawKeyValue(
  * Řádky součtu. Skládají se na jednom místě, protože je potřebuje jak měření
  * patičky, tak samotné kreslení — jinak by se počet řádků mohl rozejít.
  */
-function getTotalsRows(invoice: PdfInvoice) {
+function getTotalsRows(invoice: PdfInvoice, isVatPayer: boolean) {
   const summary = getPaymentSummary(invoice);
+  // Bez DPH je mezisoučet totéž co celková částka, řádky by jen opakovaly.
   const rows = [
-    ["Mezisoučet", formatCurrency(invoice.subtotal)],
-    ["DPH", formatCurrency(invoice.vatTotal)],
+    ...(isVatPayer
+      ? [
+          ["Mezisoučet", formatCurrency(invoice.subtotal)],
+          ["DPH", formatCurrency(invoice.vatTotal)],
+        ]
+      : []),
     ["Celkem k úhradě", formatCurrency(invoice.total)],
   ];
 
@@ -429,6 +459,7 @@ function placeFooter({
 function drawItemsHeader(
   document: PDFKit.PDFDocument,
   y: number,
+  columns: ItemColumns,
   fonts: { bold: string; regular: string },
 ) {
   document
@@ -438,11 +469,27 @@ function drawItemsHeader(
     .strokeColor("#18181b")
     .stroke();
   document.font(fonts.bold).fontSize(9).fillColor("#18181b");
-  document.text("Položka", 40, y + 12, { width: 210 });
-  document.text("Množství", 255, y + 12, { align: "right", width: 70 });
-  document.text("Cena / j.", 335, y + 12, { align: "right", width: 75 });
-  document.text("DPH", 420, y + 12, { align: "right", width: 45 });
-  document.text("Celkem", 475, y + 12, { align: "right", width: 80 });
+  document.text("Položka", columns.name.x, y + 12, { width: columns.name.width });
+  document.text("Množství", columns.quantity.x, y + 12, {
+    align: "right",
+    width: columns.quantity.width,
+  });
+  document.text("Cena / j.", columns.unitPrice.x, y + 12, {
+    align: "right",
+    width: columns.unitPrice.width,
+  });
+
+  if (columns.vat) {
+    document.text("DPH", columns.vat.x, y + 12, {
+      align: "right",
+      width: columns.vat.width,
+    });
+  }
+
+  document.text("Celkem", columns.total.x, y + 12, {
+    align: "right",
+    width: columns.total.width,
+  });
   document
     .moveTo(CONTENT_LEFT, y + 32)
     .lineTo(CONTENT_RIGHT, y + 32)
@@ -535,7 +582,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
   document.moveTo(40, 115).lineTo(555, 115).lineWidth(1.5).strokeColor("#18181b").stroke();
 
   writeLabel(document, "Dodavatel", 40, 135);
-  writeLines(
+  const supplierBottom = writeLines(
     document,
     [
       supplierName,
@@ -544,6 +591,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       invoice.profile.country,
       `IČO: ${invoice.profile.ico}`,
       invoice.profile.dic ? `DIČ: ${invoice.profile.dic}` : null,
+      isVatPayer ? null : "Nejsem plátce DPH.",
       invoice.profile.registryText,
     ],
     40,
@@ -552,7 +600,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
   );
 
   writeLabel(document, "Odběratel", 320, 135);
-  writeLines(
+  const clientBottom = writeLines(
     document,
     [
       clientName,
@@ -567,47 +615,80 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
     { width: 220 },
   );
 
-  document.moveTo(40, 260).lineTo(555, 260).lineWidth(0.7).strokeColor("#d4d4d8").stroke();
-  drawKeyValue(document, "Datum vystavení", formatDate(invoice.issueDate), 40, 280);
+  // Dlouhý zápis v rejstříku odsune zbytek dokladu níž, místo aby přetekl přes linku.
+  const datesTop = Math.max(
+    DEFAULT_DATES_TOP,
+    supplierBottom + DATES_GAP,
+    clientBottom + DATES_GAP,
+  );
+  const symbolsTop = datesTop + 45;
+
+  document
+    .moveTo(40, datesTop - 20)
+    .lineTo(555, datesTop - 20)
+    .lineWidth(0.7)
+    .strokeColor("#d4d4d8")
+    .stroke();
+  drawKeyValue(document, "Datum vystavení", formatDate(invoice.issueDate), 40, datesTop);
+
+  // DUZP patří jen na daňový doklad, neplátce ho neuvádí.
+  if (isVatPayer) {
+    drawKeyValue(
+      document,
+      "DUZP",
+      formatDate(invoice.taxableSupplyDate ?? invoice.issueDate),
+      210,
+      datesTop,
+    );
+  }
+
   drawKeyValue(
     document,
-    "DUZP",
-    formatDate(invoice.taxableSupplyDate ?? invoice.issueDate),
-    210,
-    280,
+    "Datum splatnosti",
+    formatDate(invoice.dueDate),
+    isVatPayer ? 380 : 210,
+    datesTop,
   );
-  drawKeyValue(document, "Datum splatnosti", formatDate(invoice.dueDate), 380, 280);
-  drawKeyValue(document, "Variabilní symbol", invoice.variableSymbol, 40, 325);
-  drawKeyValue(document, "Konstantní symbol", invoice.constantSymbol || "-", 210, 325);
-  drawKeyValue(document, "Specifický symbol", invoice.specificSymbol || "-", 380, 325);
+  drawKeyValue(document, "Variabilní symbol", invoice.variableSymbol, 40, symbolsTop);
+  drawKeyValue(document, "Konstantní symbol", invoice.constantSymbol || "-", 210, symbolsTop);
+  drawKeyValue(document, "Specifický symbol", invoice.specificSymbol || "-", 380, symbolsTop);
 
   const contentBottom = getContentBottom(document);
-  let rowY = drawItemsHeader(document, 385, fonts);
+  const columns = isVatPayer ? ITEM_COLUMNS.payer : ITEM_COLUMNS.nonPayer;
+  let rowY = drawItemsHeader(document, symbolsTop + 60, columns, fonts);
 
   invoice.items.forEach((item) => {
     // Řádek, který by přetekl přes spodní okraj, patří až na další stránku.
     // Bez toho zalomí PDFKit sám a `rowY` přestane odpovídat skutečnosti.
     if (rowY + ITEM_ROW_HEIGHT > contentBottom) {
       document.addPage();
-      rowY = drawItemsHeader(document, document.page.margins.top, fonts);
+      rowY = drawItemsHeader(document, document.page.margins.top, columns, fonts);
     }
 
-    document.fillColor("#18181b").text(item.name, 40, rowY, { width: 210 });
-    document.text(`${numberFormatter.format(Number(item.quantity))} ${item.unit}`, 255, rowY, {
-      align: "right",
-      width: 70,
+    document.fillColor("#18181b").text(item.name, columns.name.x, rowY, {
+      width: columns.name.width,
     });
-    document.text(formatCurrency(item.unitPrice), 335, rowY, {
+    document.text(
+      `${numberFormatter.format(Number(item.quantity))} ${item.unit}`,
+      columns.quantity.x,
+      rowY,
+      { align: "right", width: columns.quantity.width },
+    );
+    document.text(formatCurrency(item.unitPrice), columns.unitPrice.x, rowY, {
       align: "right",
-      width: 75,
+      width: columns.unitPrice.width,
     });
-    document.text(`${numberFormatter.format(Number(item.vatRate))} %`, 420, rowY, {
+
+    if (columns.vat) {
+      document.text(`${numberFormatter.format(Number(item.vatRate))} %`, columns.vat.x, rowY, {
+        align: "right",
+        width: columns.vat.width,
+      });
+    }
+
+    document.font(fonts.bold).text(formatCurrency(item.lineTotal), columns.total.x, rowY, {
       align: "right",
-      width: 45,
-    });
-    document.font(fonts.bold).text(formatCurrency(item.lineTotal), 475, rowY, {
-      align: "right",
-      width: 80,
+      width: columns.total.width,
     });
     document.font(fonts.regular);
     rowY += ITEM_ROW_HEIGHT;
@@ -620,7 +701,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
     invoice.profile.swift ? `SWIFT: ${invoice.profile.swift}` : null,
     `Variabilní symbol: ${invoice.variableSymbol}`,
   ];
-  const totalsRows = getTotalsRows(invoice);
+  const totalsRows = getTotalsRows(invoice, isVatPayer);
   const layout = measureFooter(document, {
     assetHeight: Math.max(
       measureFittedHeight(document, signaturePath, SIGNATURE_FIT),
