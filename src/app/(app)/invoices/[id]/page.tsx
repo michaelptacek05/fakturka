@@ -253,6 +253,7 @@ export default async function InvoiceDetailPage({
               <p>{invoice.profile.country}</p>
               <p>IČO: {invoice.profile.ico}</p>
               {invoice.profile.dic ? <p>DIČ: {invoice.profile.dic}</p> : null}
+              {isVatPayer ? null : <p>Nejsem plátce DPH.</p>}
               {invoice.profile.registryText ? (
                 <p className="mt-2 text-zinc-600">
                   {invoice.profile.registryText}
@@ -284,15 +285,24 @@ export default async function InvoiceDetailPage({
               label: "Datum vystavení",
               value: formatDate(invoice.issueDate),
             },
-            {
-              label: "DUZP",
-              value: formatDate(invoice.taxableSupplyDate ?? invoice.issueDate),
-            },
+            // DUZP patří jen na daňový doklad, neplátce ho neuvádí.
+            ...(isVatPayer
+              ? [
+                  {
+                    label: "DUZP",
+                    value: formatDate(
+                      invoice.taxableSupplyDate ?? invoice.issueDate,
+                    ),
+                  },
+                ]
+              : []),
             {
               label: "Datum splatnosti",
               value: formatDate(invoice.dueDate),
             },
             {
+              // Symboly drží vlastní řádek, i když bez DUZP zbyde místo vedle dat.
+              className: "sm:col-start-1 print:col-start-1",
               label: "Variabilní symbol",
               value: invoice.variableSymbol,
             },
@@ -305,7 +315,7 @@ export default async function InvoiceDetailPage({
               value: invoice.specificSymbol || "—",
             },
           ].map((entry) => (
-            <div key={entry.label}>
+            <div className={entry.className} key={entry.label}>
               <p className="text-xs uppercase tracking-wide text-zinc-500">
                 {entry.label}
               </p>
@@ -321,7 +331,9 @@ export default async function InvoiceDetailPage({
                 <th className="py-3 pr-3 font-semibold">Položka</th>
                 <th className="px-3 py-3 text-right font-semibold">Množství</th>
                 <th className="px-3 py-3 text-right font-semibold">Cena / j.</th>
-                <th className="px-3 py-3 text-right font-semibold">DPH</th>
+                {isVatPayer ? (
+                  <th className="px-3 py-3 text-right font-semibold">DPH</th>
+                ) : null}
                 <th className="py-3 pl-3 text-right font-semibold">Celkem</th>
               </tr>
             </thead>
@@ -338,9 +350,11 @@ export default async function InvoiceDetailPage({
                   <td className="px-3 py-3 text-right">
                     {formatCurrency(item.unitPrice)}
                   </td>
-                  <td className="px-3 py-3 text-right">
-                    {numberFormatter.format(Number(item.vatRate))} %
-                  </td>
+                  {isVatPayer ? (
+                    <td className="px-3 py-3 text-right">
+                      {numberFormatter.format(Number(item.vatRate))} %
+                    </td>
+                  ) : null}
                   <td className="py-3 pl-3 text-right font-medium">
                     {formatCurrency(item.lineTotal)}
                   </td>
@@ -420,14 +434,19 @@ export default async function InvoiceDetailPage({
           </div>
 
           <div className="grid min-w-0 content-start gap-2 text-sm">
-            <div className="flex justify-between">
-              <span>Mezisoučet</span>
-              <strong>{formatCurrency(invoice.subtotal)}</strong>
-            </div>
-            <div className="flex justify-between">
-              <span>DPH</span>
-              <strong>{formatCurrency(invoice.vatTotal)}</strong>
-            </div>
+            {/* Bez DPH je mezisoučet totéž co celková částka, řádky by jen opakovaly. */}
+            {isVatPayer ? (
+              <>
+                <div className="flex justify-between">
+                  <span>Mezisoučet</span>
+                  <strong>{formatCurrency(invoice.subtotal)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>DPH</span>
+                  <strong>{formatCurrency(invoice.vatTotal)}</strong>
+                </div>
+              </>
+            ) : null}
             <div className="mt-2 flex justify-between border-t-2 border-zinc-950 pt-3 text-lg">
               <span>Celkem k úhradě</span>
               <strong>{formatCurrency(invoice.total)}</strong>

@@ -16,6 +16,7 @@ import {
 import { Field, InputField, TextareaField } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type InvoiceRow = {
   id: string;
@@ -260,7 +261,12 @@ export function InvoiceForm({
           <CardTitle>Termíny</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div
+            className={cn(
+              "grid gap-4",
+              isVatPayer ? "md:grid-cols-4" : "md:grid-cols-3",
+            )}
+          >
             <Field label="Datum vystavení" htmlFor="issueDate">
               <Input
                 id="issueDate"
@@ -282,20 +288,23 @@ export function InvoiceForm({
               />
             </Field>
 
-            <Field
-              label="DUZP"
-              htmlFor="taxableSupplyDate"
-              hint="Datum zdanitelného plnění"
-            >
-              <Input
-                id="taxableSupplyDate"
-                type="date"
-                name="taxableSupplyDate"
-                value={taxableSupplyDate}
-                onChange={(event) => setTaxableSupplyDate(event.target.value)}
-                disabled={!isEditable}
-              />
-            </Field>
+            {/* Neplátce DUZP neuvádí; server za něj dosadí datum vystavení. */}
+            {isVatPayer ? (
+              <Field
+                label="DUZP"
+                htmlFor="taxableSupplyDate"
+                hint="Datum zdanitelného plnění"
+              >
+                <Input
+                  id="taxableSupplyDate"
+                  type="date"
+                  name="taxableSupplyDate"
+                  value={taxableSupplyDate}
+                  onChange={(event) => setTaxableSupplyDate(event.target.value)}
+                  disabled={!isEditable}
+                />
+              </Field>
+            ) : null}
 
             <Field label="Splatnost za" htmlFor="dueDatePreset">
               <Select
@@ -453,7 +462,14 @@ export function InvoiceForm({
                 className="rounded-lg border border-border bg-muted/40 p-3"
                 key={row.id}
               >
-                <div className="grid gap-3 lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_110px_auto]">
+                <div
+                  className={cn(
+                    "grid gap-3",
+                    isVatPayer
+                      ? "lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_110px_auto]"
+                      : "lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_auto]",
+                  )}
+                >
                   <Field label="Název" htmlFor={`${fieldPrefix}-name-${index}`} required>
                     <Input
                       id={`${fieldPrefix}-name-${index}`}
@@ -517,26 +533,28 @@ export function InvoiceForm({
                     />
                   </Field>
 
-                  <Field label="DPH %" htmlFor={`${fieldPrefix}-vat-${index}`}>
-                    <Select
-                      id={`${fieldPrefix}-vat-${index}`}
-                      name="vatRate"
-                      disabled={!isVatPayer || !isEditable}
-                      value={isVatPayer ? row.vatRate : "0"}
-                      onChange={(event) =>
-                        updateRow(row.id, { vatRate: event.target.value })
-                      }
-                    >
-                      {vatRatePresets.map((rate) => (
-                        <option key={rate} value={rate}>
-                          {rate} %
-                        </option>
-                      ))}
-                      {vatRatePresets.includes(row.vatRate) ? null : (
-                        <option value={row.vatRate}>{row.vatRate} %</option>
-                      )}
-                    </Select>
-                  </Field>
+                  {isVatPayer ? (
+                    <Field label="DPH %" htmlFor={`${fieldPrefix}-vat-${index}`}>
+                      <Select
+                        id={`${fieldPrefix}-vat-${index}`}
+                        name="vatRate"
+                        disabled={!isEditable}
+                        value={row.vatRate}
+                        onChange={(event) =>
+                          updateRow(row.id, { vatRate: event.target.value })
+                        }
+                      >
+                        {vatRatePresets.map((rate) => (
+                          <option key={rate} value={rate}>
+                            {rate} %
+                          </option>
+                        ))}
+                        {vatRatePresets.includes(row.vatRate) ? null : (
+                          <option value={row.vatRate}>{row.vatRate} %</option>
+                        )}
+                      </Select>
+                    </Field>
+                  ) : null}
 
                   <div className="flex items-end justify-end pb-0.5">
                     <Button
@@ -563,15 +581,24 @@ export function InvoiceForm({
           </div>
 
           <div className="ml-auto w-full max-w-sm space-y-2 rounded-lg border border-border bg-muted/60 p-4 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Mezisoučet</span>
-              <strong>{formatCurrency(totals.subtotal)}</strong>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">DPH</span>
-              <strong>{formatCurrency(totals.vat)}</strong>
-            </div>
-            <div className="flex justify-between border-t border-border pt-2 text-base">
+            {isVatPayer ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Mezisoučet</span>
+                  <strong>{formatCurrency(totals.subtotal)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">DPH</span>
+                  <strong>{formatCurrency(totals.vat)}</strong>
+                </div>
+              </>
+            ) : null}
+            <div
+              className={cn(
+                "flex justify-between text-base",
+                isVatPayer && "border-t border-border pt-2",
+              )}
+            >
               <span>Celkem</span>
               <strong>{formatCurrency(totals.total)}</strong>
             </div>
