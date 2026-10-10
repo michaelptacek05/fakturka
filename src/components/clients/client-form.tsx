@@ -1,9 +1,11 @@
 "use client";
 
 import { Save, Trash2, UserPlus } from "lucide-react";
+import Link from "next/link";
 
 import { createClient, deleteClient, updateClient } from "@/app/actions";
 import { CompanyLookup } from "@/components/ares/company-lookup";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -125,8 +127,9 @@ export function ClientForm({ clientId, defaultValues }: ClientFormProps) {
             </div>
           </CardContent>
 
-          <CardFooter className="justify-end">
-            <Button type="submit">
+          <CardFooter className="justify-between">
+            <Button asChild variant="outline"><Link href="/clients">Zrušit</Link></Button>
+            <SubmitButton type="submit">
               {clientId ? (
                 <>
                   <Save className="size-4" aria-hidden="true" />
@@ -138,7 +141,7 @@ export function ClientForm({ clientId, defaultValues }: ClientFormProps) {
                   Přidat odběratele
                 </>
               )}
-            </Button>
+            </SubmitButton>
           </CardFooter>
         </Card>
       </form>
@@ -153,10 +156,10 @@ export function ClientForm({ clientId, defaultValues }: ClientFormProps) {
             }
           }}
         >
-          <Button type="submit" variant="destructive-outline" size="sm">
+          <SubmitButton type="submit" variant="destructive-outline" size="sm">
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat odběratele
-          </Button>
+          </SubmitButton>
         </form>
       ) : null}
     </div>

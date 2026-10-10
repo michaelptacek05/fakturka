@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
 import { CompanyLookup } from "@/components/ares/company-lookup";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   Card,
   CardContent,
@@ -366,9 +368,9 @@ export function InvoiceForm({
             />
           ) : null}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-2 gap-4">
             <InputField
-              className="md:col-span-2"
+              className="col-span-2"
               label="Firma nebo jméno"
               name="clientName"
               required
@@ -377,6 +379,7 @@ export function InvoiceForm({
               disabled={!isEditable}
             />
             <InputField
+              className="col-span-2 sm:col-span-1"
               label="Ulice a číslo"
               name="clientStreet"
               required
@@ -434,7 +437,7 @@ export function InvoiceForm({
       </Card>
 
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-4">
+        <CardHeader className="flex-col items-start justify-between gap-4 sm:flex-row">
           <div className="space-y-1">
             <CardTitle>Položky faktury</CardTitle>
             <CardDescription>
@@ -456,21 +459,21 @@ export function InvoiceForm({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <div className="space-y-3">
+          <div className="divide-y divide-border">
             {rows.map((row, index) => (
               <div
-                className="rounded-lg border border-border bg-muted/40 p-3"
+                className="py-4 first:pt-0 last:pb-0"
                 key={row.id}
               >
                 <div
                   className={cn(
-                    "grid gap-3",
+                    "grid grid-cols-2 gap-3",
                     isVatPayer
                       ? "lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_110px_auto]"
                       : "lg:grid-cols-[minmax(0,1.6fr)_100px_90px_140px_auto]",
                   )}
                 >
-                  <Field label="Název" htmlFor={`${fieldPrefix}-name-${index}`} required>
+                  <Field className="col-span-2 lg:col-span-1" label="Název" htmlFor={`${fieldPrefix}-name-${index}`} required>
                     <Input
                       id={`${fieldPrefix}-name-${index}`}
                       name="itemName"
@@ -515,7 +518,8 @@ export function InvoiceForm({
                   </Field>
 
                   <Field
-                    label="Cena / j."
+                    label="Cena za jednotku"
+                    className={isVatPayer ? undefined : "col-span-2 lg:col-span-1"}
                     htmlFor={`${fieldPrefix}-price-${index}`}
                     required
                   >
@@ -556,16 +560,17 @@ export function InvoiceForm({
                     </Field>
                   ) : null}
 
-                  <div className="flex items-end justify-end pb-0.5">
+                  <div className="col-span-2 flex items-end justify-end pb-0.5 lg:col-span-1">
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon-sm"
+                      size="sm"
                       onClick={() => removeRow(row.id)}
                       disabled={!isEditable || rows.length === 1}
                       aria-label={`Odebrat položku ${index + 1}`}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
+                      <span className="lg:hidden">Odebrat položku</span>
                     </Button>
                   </div>
                 </div>
@@ -580,7 +585,7 @@ export function InvoiceForm({
             ))}
           </div>
 
-          <div className="ml-auto w-full max-w-sm space-y-2 rounded-lg border border-border bg-muted/60 p-4 text-sm">
+          <div className="ml-auto w-full max-w-sm space-y-2 border-t border-border pt-4 text-sm">
             {isVatPayer ? (
               <>
                 <div className="flex justify-between">
@@ -635,12 +640,21 @@ export function InvoiceForm({
           </div>
         </CardContent>
 
-        {isEditable ? (
-          <CardFooter className="justify-end">
-            <Button type="submit">{submitLabel}</Button>
-          </CardFooter>
-        ) : null}
       </Card>
+      {isEditable ? (
+        <CardFooter className="flex-col items-stretch gap-4 rounded-xl border border-border bg-card sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-baseline justify-between gap-3 sm:block" aria-live="polite" aria-atomic="true">
+            <span className="text-sm text-muted-foreground">Celkem k fakturaci</span>
+            <strong className="text-xl tabular-nums sm:ml-3">{formatCurrency(totals.total)}</strong>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="/invoices">Zrušit</Link>
+            </Button>
+            <SubmitButton type="submit" pendingLabel="Ukládám fakturu…" className="flex-1 sm:flex-none">{submitLabel}</SubmitButton>
+          </div>
+        </CardFooter>
+      ) : null}
     </form>
   );
 }

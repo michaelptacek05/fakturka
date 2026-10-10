@@ -5,6 +5,7 @@ import { Ban, Check, Undo2 } from "lucide-react";
 
 import { cancelInvoice, markInvoicePaid } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { formatCurrency } from "@/lib/format";
 import { fromCents } from "@/lib/invoice-payment";
@@ -34,10 +35,10 @@ export function InvoiceStatusActions({
     <>
       {isPaid || isCancelled ? null : (
         <form action={markPaidAction}>
-          <Button type="submit" variant="success" size="sm">
+          <SubmitButton type="submit" variant="success" size="sm">
             <Check className="size-4" aria-hidden="true" />
             Označit jako zaplacené
-          </Button>
+          </SubmitButton>
         </form>
       )}
 
@@ -54,6 +55,7 @@ export function InvoiceStatusActions({
           </Button>
 
           <dialog
+            aria-labelledby="cancel-invoice-title"
             ref={dialogRef}
             className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-border bg-card p-0 text-card-foreground shadow-lg backdrop:bg-black/50"
             onClick={(event) => {
@@ -65,7 +67,7 @@ export function InvoiceStatusActions({
           >
             <div className="space-y-4 p-6">
               <div className="space-y-2">
-                <h2 className="text-lg font-semibold tracking-tight">
+                <h2 id="cancel-invoice-title" className="text-lg font-semibold tracking-tight">
                   Stornovat fakturu
                 </h2>
                 <p className="text-sm text-muted-foreground">
@@ -95,7 +97,7 @@ export function InvoiceStatusActions({
 
                 <form action={cancelAction}>
                   <input type="hidden" name="refund" value="0" />
-                  <Button
+                  <SubmitButton
                     type="submit"
                     variant="outline"
                     size="sm"
@@ -103,12 +105,12 @@ export function InvoiceStatusActions({
                   >
                     <Ban className="size-4" aria-hidden="true" />
                     Peníze si necháváme
-                  </Button>
+                  </SubmitButton>
                 </form>
 
                 <form action={cancelAction}>
                   <input type="hidden" name="refund" value="1" />
-                  <Button
+                  <SubmitButton
                     type="submit"
                     variant="destructive"
                     size="sm"
@@ -116,7 +118,7 @@ export function InvoiceStatusActions({
                   >
                     <Undo2 className="size-4" aria-hidden="true" />
                     Vrátili jsme je
-                  </Button>
+                  </SubmitButton>
                 </form>
               </div>
             </div>
@@ -131,10 +133,10 @@ export function InvoiceStatusActions({
             }
           }}
         >
-          <Button type="submit" variant="outline" size="sm">
+          <SubmitButton type="submit" variant="outline" size="sm">
             <Ban className="size-4" aria-hidden="true" />
             Stornovat
-          </Button>
+          </SubmitButton>
         </form>
       )}
     </>

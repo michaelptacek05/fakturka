@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,8 @@ function Field({
   label,
   required,
 }: FieldProps) {
+  const hintId = `${React.useId()}-hint`;
+
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <Label htmlFor={htmlFor}>
@@ -34,8 +38,15 @@ function Field({
           </span>
         ) : null}
       </Label>
-      {children}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
+      {React.Children.map(children, (child) => {
+        if (!hint || !React.isValidElement<{ "aria-describedby"?: string }>(child)) {
+          return child;
+        }
+        return React.cloneElement(child, {
+          "aria-describedby": [child.props["aria-describedby"], hintId].filter(Boolean).join(" "),
+        });
+      })}
+      {hint ? <p id={hintId} className="text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -50,15 +61,17 @@ function InputField({
   required,
   ...props
 }: InputFieldProps) {
+  const generatedId = React.useId();
+  const id = props.id ?? generatedId;
   return (
     <Field
       className={className}
       hint={hint}
-      htmlFor={props.id ?? props.name}
+      htmlFor={id}
       label={label}
       required={required}
     >
-      <Input id={props.id ?? props.name} required={required} {...props} />
+      <Input {...props} id={id} required={required} />
     </Field>
   );
 }
@@ -73,15 +86,17 @@ function TextareaField({
   required,
   ...props
 }: TextareaFieldProps) {
+  const generatedId = React.useId();
+  const id = props.id ?? generatedId;
   return (
     <Field
       className={className}
       hint={hint}
-      htmlFor={props.id ?? props.name}
+      htmlFor={id}
       label={label}
       required={required}
     >
-      <Textarea id={props.id ?? props.name} required={required} {...props} />
+      <Textarea {...props} id={id} required={required} />
     </Field>
   );
 }
@@ -97,15 +112,17 @@ function SelectField({
   required,
   ...props
 }: SelectFieldProps) {
+  const generatedId = React.useId();
+  const id = props.id ?? generatedId;
   return (
     <Field
       className={className}
       hint={hint}
-      htmlFor={props.id ?? props.name}
+      htmlFor={id}
       label={label}
       required={required}
     >
-      <Select id={props.id ?? props.name} required={required} {...props}>
+      <Select {...props} id={id} required={required}>
         {children}
       </Select>
     </Field>

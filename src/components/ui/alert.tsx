@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
  * mřížku stránky tím, že by z ní udělal další zvýrazněnou kartu.
  */
 const alertVariants = cva(
-  "flex items-start gap-3 rounded-lg border border-border border-l-2 bg-card px-4 py-3 text-sm",
+  "flex items-start gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm",
   {
     variants: {
       variant: {
@@ -59,7 +59,7 @@ function Alert({
   return (
     <div
       data-slot="alert"
-      role="status"
+      role={variant === "destructive" ? "alert" : "status"}
       className={cn(alertVariants({ variant }), className)}
       {...props}
     >

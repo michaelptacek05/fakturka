@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const signOutSlot = authEnabled ? (
     <form action={signOut}>
       <button
-        className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm text-sidebar-foreground/80 outline-none transition-colors hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40"
+        className="flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-border/60 hover:text-sidebar-accent-foreground focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40"
         type="submit"
       >
         <LogOut aria-hidden="true" className="size-4 text-sidebar-muted" />
@@ -28,10 +28,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // V tisku by `min-h-screen` natáhl podklad do konce stránky a pod fakturou
     // by zůstal pruh barvy plátna — v tmavém motivu skoro černý.
     <div className="min-h-screen bg-background print:min-h-0 print:bg-white">
+      <a
+        href="#main-content"
+        className="print-hidden sr-only fixed left-4 top-2 z-[60] rounded-lg bg-card px-4 py-3 text-sm font-medium text-foreground focus:not-sr-only focus:outline-2 focus:outline-ring"
+      >
+        Přeskočit na obsah
+      </a>
       <AppNav signOutSlot={signOutSlot} />
 
-      <div className="lg:pl-64 print:pl-0">
-        <div className="pt-14 print:pt-0">
+      <div className="lg:pl-56 print:pl-0">
+        <div className="pt-16 print:pt-0">
           {!authEnabled ? (
             <div
               className="print-hidden flex items-start justify-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-foreground sm:px-6 lg:px-8"
@@ -51,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           ) : null}
 
-          <main>{children}</main>
+          <main id="main-content" tabIndex={-1} className="min-w-0 outline-none">{children}</main>
         </div>
 
         <footer className="print-hidden border-t border-border">

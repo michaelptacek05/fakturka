@@ -131,17 +131,18 @@ export default async function TasksPage({
 
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 py-8 sm:px-6 lg:px-8">
-      <PageHeader
-        title="Úkoly"
-        description={
-          projects === null
-            ? undefined
-            : `${openCount} otevřených úkolů. Stav změníte přetažením karty mezi sloupci.`
-        }
-        actions={
-          <TaskCreateForm
-            projects={openProjectOptions}
-            returnTo="/tasks"
+      <TaskCreateForm
+        projects={openProjectOptions}
+        returnTo="/tasks"
+        header={
+          <PageHeader
+            className="border-0 pb-0"
+            title="Úkoly"
+            description={
+              projects === null
+                ? undefined
+                : `${openCount} otevřených úkolů napříč projekty.`
+            }
           />
         }
       />
@@ -215,7 +216,7 @@ export default async function TasksPage({
                   ))}
                 </SelectField>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button type="submit" variant="outline">
                     <Search className="size-4" aria-hidden="true" />
                     Filtrovat

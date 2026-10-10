@@ -214,6 +214,7 @@ export default async function InvoicesPage({
 
       {invoices !== null && invoices.length > 0 ? (
         <InvoiceBulkTable
+          key={`${queryParam}:${statusFilter ?? ""}`}
           invoices={invoices.map((invoice) => {
             const visualState = getInvoiceVisualState(invoice);
             const summary = getPaymentSummary(invoice);

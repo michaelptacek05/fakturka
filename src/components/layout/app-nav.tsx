@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   Download,
   FileText,
+  Plus,
   FolderKanban,
   Gauge,
   ListTodo,
@@ -97,10 +98,10 @@ function NavLinks({
               <Link
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40",
+                  "flex h-11 items-center lg:h-10 gap-2.5 rounded-lg px-3 text-sm outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40",
                   isActive
                     ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground",
+                    : "text-sidebar-foreground hover:bg-sidebar-border/60 hover:text-sidebar-accent-foreground",
                 )}
                 href={item.href}
                 key={item.href}
@@ -130,7 +131,7 @@ function Wordmark({ onNavigate }: { onNavigate?: () => void }) {
       href="/"
       onClick={onNavigate}
     >
-      <span className="text-[1.0625rem] font-semibold tracking-[-0.02em] text-sidebar-primary">
+      <span className="text-xl font-semibold tracking-[-0.02em] text-sidebar-primary">
         Fakturka
       </span>
       <span className="text-xs text-sidebar-muted">Fakturace OSVČ</span>
@@ -254,8 +255,19 @@ export function AppNav({ signOutSlot }: { signOutSlot?: React.ReactNode }) {
 
   const sidebarBody = (
     <>
-      <div className="px-5 py-5">
+      <div className="px-5 py-7">
         <Wordmark onNavigate={() => setIsOpen(false)} />
+      </div>
+
+      <div className="px-3 pb-6">
+        <Link
+          href="/invoices/new"
+          onClick={() => setIsOpen(false)}
+          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-border/50 text-sm font-medium text-sidebar-primary transition-colors hover:bg-sidebar-border focus-visible:outline-2 focus-visible:outline-sidebar-ring"
+        >
+          <Plus aria-hidden="true" className="size-4" />
+          Vystavit fakturu
+        </Link>
       </div>
 
       <div className="scrollbar-slim flex-1 overflow-y-auto px-3 pb-4">
@@ -270,7 +282,7 @@ export function AppNav({ signOutSlot }: { signOutSlot?: React.ReactNode }) {
 
   return (
     <>
-      <aside className="print-hidden fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
+      <aside className="print-hidden fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
         {sidebarBody}
       </aside>
 
@@ -293,7 +305,7 @@ export function AppNav({ signOutSlot }: { signOutSlot?: React.ReactNode }) {
           >
             <button
               aria-label="Zavřít menu"
-              className="absolute right-3 top-4 flex size-9 items-center justify-center rounded-lg text-sidebar-muted outline-none transition-colors hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40"
+              className="absolute right-3 top-4 flex size-11 items-center justify-center rounded-lg text-sidebar-muted outline-none transition-colors hover:bg-sidebar-border/60 hover:text-sidebar-accent-foreground focus-visible:ring-[3px] focus-visible:ring-sidebar-ring/40"
               onClick={() => setIsOpen(false)}
               type="button"
             >
@@ -304,12 +316,12 @@ export function AppNav({ signOutSlot }: { signOutSlot?: React.ReactNode }) {
         </div>
       ) : null}
 
-      <header className="print-hidden fixed inset-x-0 top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur sm:px-6 lg:left-64 lg:px-8">
+      <header className="print-hidden fixed inset-x-0 top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card px-4 sm:px-6 lg:left-56 lg:px-8">
         <button
           aria-controls={DRAWER_ID}
           aria-expanded={isOpen}
           aria-label="Otevřít menu"
-          className="-ml-1 flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35 lg:hidden"
+          className="-ml-1 flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35 lg:hidden"
           onClick={() => setIsOpen(true)}
           ref={triggerRef}
           type="button"
