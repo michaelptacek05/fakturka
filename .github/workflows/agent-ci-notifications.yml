@@ -1,0 +1,42 @@
+name: Agenti — upozornění na CI
+
+on:
+  workflow_run:
+    workflows: ["CI a publikace Docker image"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ci-notification-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Vyhodnotit CI a upozornit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.workflow_run.event == 'push' ||
+      github.event.workflow_run.event == 'pull_request' ||
+      github.event.workflow_run.event == 'workflow_dispatch'
+    steps:
+      # Nikdy nepřebírat skripty nebo artefakty z kontrolovaného PR.
+      - name: Checkout důvěryhodné automatizace
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Oznámit výsledek
+        uses: actions/github-script@v7
+        env:
+          AGENT_NOTIFY_USER: ${{ vars.AGENT_NOTIFY_USER || github.repository_owner }}
+        with:
+          script: |
+            const { notifyCi } = await import(`${process.env.GITHUB_WORKSPACE}/.github/agents/notify-ci.mjs`);
+            await notifyCi({ github, context, core, notifyUser: process.env.AGENT_NOTIFY_USER });

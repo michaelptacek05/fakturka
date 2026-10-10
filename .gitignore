@@ -26,7 +26,6 @@
 *.pem
 .codex-artifacts/
 .idea/
-AGENTS.md
 CLAUDE.md
 .claude/
 
