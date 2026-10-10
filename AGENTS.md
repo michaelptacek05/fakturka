@@ -17,6 +17,13 @@ Czech. Keep changes focused and follow the surrounding code.
 - Add regression coverage for changed behavior. Generated Prisma clients,
   `.next`, credentials and invoice assets do not belong in Git.
 
+## Git workflow
+
+- Never push or merge directly into `main`. Every change reaches `main`
+  through a pull request from a feature branch, merged only after CI passes.
+- Pushing `main` publishes the production Docker image, so a direct push
+  bypasses both review and the CI gate.
+
 ## Code Review Rules
 
 Review the PR diff and the affected call sites. Report actionable regressions
