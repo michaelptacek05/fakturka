@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { Download, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { deleteInvoices } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   Table,
   TableBody,
@@ -37,16 +38,6 @@ type InvoiceBulkTableProps = {
   invoices: InvoiceBulkRow[];
 };
 
-/** Barevný proužek na začátku řádku nese stav i bez čtení textu. */
-const rowAccent: Record<InvoiceVisualState, string> = {
-  cancelled: "before:bg-transparent opacity-60",
-  default: "before:bg-transparent",
-  overdue: "before:bg-destructive",
-  paid: "before:bg-success",
-  partial: "before:bg-warning",
-  unpaid: "before:bg-warning",
-};
-
 const badgeVariant: Record<
   InvoiceVisualState,
   "default" | "success" | "warning" | "destructive" | "outline"
@@ -60,9 +51,19 @@ const badgeVariant: Record<
 };
 
 export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selection, setSelectedIds] = useState<string[]>([]);
+  const selectedIds = useMemo(() => {
+    const visibleIds = new Set(invoices.map((invoice) => invoice.id));
+    return selection.filter((id) => visibleIds.has(id));
+  }, [invoices, selection]);
+  const selectAllRef = useRef<HTMLInputElement>(null);
   const selectedCount = selectedIds.length;
   const allSelected = selectedCount > 0 && selectedCount === invoices.length;
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = selectedCount > 0 && !allSelected;
+    }
+  }, [allSelected, selectedCount]);
   const exportUrl = useMemo(() => {
     const params = new URLSearchParams();
 
@@ -74,7 +75,7 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
   function toggleInvoice(invoiceId: string, checked: boolean) {
     setSelectedIds((currentIds) =>
       checked
-        ? [...currentIds, invoiceId]
+        ? Array.from(new Set([...currentIds, invoiceId]))
         : currentIds.filter((id) => id !== invoiceId),
     );
   }
@@ -102,51 +103,93 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
         }
       }}
     >
+      {selectedIds.map((id) => (
+        <input key={id} type="hidden" name="invoiceId" value={id} />
+      ))}
       <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">
-          Vybráno{" "}
-          <span className="font-medium text-foreground">{selectedCount}</span> z{" "}
-          {invoices.length}
-        </p>
+        <div className="flex items-center gap-3">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm sm:min-h-9">
+            <input
+              ref={selectAllRef}
+              type="checkbox"
+              className="size-4 accent-primary"
+              checked={allSelected}
+              onChange={(event) => toggleAll(event.target.checked)}
+              aria-label="Vybrat všechny faktury"
+            />
+            Vybrat vše
+          </label>
+          <p className="text-sm text-muted-foreground" aria-live="polite" aria-atomic="true">
+            {selectedCount > 0 ? (
+              <>Vybráno <span className="font-medium text-foreground">{selectedCount}</span> z {invoices.length}</>
+            ) : (
+              <>{invoices.length} faktur</>
+            )}
+          </p>
+        </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            aria-disabled={selectedCount === 0}
-            className={selectedCount === 0 ? "pointer-events-none opacity-50" : ""}
-          >
-            <Link href={selectedCount > 0 ? exportUrl : "#"}>
+          {selectedCount > 0 ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={exportUrl}>
+                <Download className="size-4" aria-hidden="true" />
+                Export CSV
+              </Link>
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" size="sm" disabled>
               <Download className="size-4" aria-hidden="true" />
               Export CSV
-            </Link>
-          </Button>
+            </Button>
+          )}
           {/* Plná destruktivní barva až ve chvíli, kdy je co mazat. */}
-          <Button
+          <SubmitButton
             type="submit"
-            variant={selectedCount === 0 ? "outline" : "destructive"}
+            variant="destructive-outline"
+            pendingLabel="Mažu…"
             size="sm"
             disabled={selectedCount === 0}
           >
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat vybrané
-          </Button>
+          </SubmitButton>
         </div>
       </div>
 
-      <TableWrapper>
+      <ul className="divide-y divide-border md:hidden" aria-label="Seznam faktur">
+        {invoices.map((invoice) => (
+          <li key={invoice.id} className={cn("flex gap-2 p-4", selectedIds.includes(invoice.id) && "bg-accent/40")}>
+            <label className="flex size-11 shrink-0 cursor-pointer items-center justify-center">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={selectedIds.includes(invoice.id)}
+                onChange={(event) => toggleInvoice(invoice.id, event.target.checked)}
+                aria-label={`Vybrat fakturu ${invoice.number}`}
+              />
+            </label>
+            <div className="min-w-0 flex-1 space-y-2">
+              <Link href={invoice.href} className="block rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 font-semibold">
+                  <span>{invoice.number}</span>
+                  <span className="tabular-nums">{invoice.total}</span>
+                </div>
+                <p className="mt-1 break-words text-sm text-muted-foreground">{invoice.clientName}</p>
+              </Link>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Badge dot variant={badgeVariant[invoice.visualState]}>{invoice.statusLabel}</Badge>
+                <span className="text-xs text-muted-foreground">Splatnost {invoice.dueDate}</span>
+              </div>
+              {invoice.remaining ? <p className="text-xs text-muted-foreground">Zbývá {invoice.remaining}</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <TableWrapper className="hidden md:block">
         <Table className="min-w-[820px]">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-12">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-primary"
-                  checked={allSelected}
-                  onChange={(event) => toggleAll(event.target.checked)}
-                  aria-label="Vybrat všechny faktury"
-                />
-              </TableHead>
+              <TableHead className="w-12"><span className="sr-only">Výběr</span></TableHead>
               <TableHead>Číslo</TableHead>
               <TableHead>Odběratel</TableHead>
               <TableHead>Vystaveno</TableHead>
@@ -160,22 +203,21 @@ export function InvoiceBulkTable({ invoices }: InvoiceBulkTableProps) {
               <TableRow
                 key={invoice.id}
                 className={cn(
-                  "relative before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:content-['']",
-                  rowAccent[invoice.visualState],
+                  selectedIds.includes(invoice.id) && "bg-accent/40",
                 )}
               >
                 <TableCell>
+                  <label className="flex size-9 cursor-pointer items-center justify-center">
                   <input
                     type="checkbox"
                     className="size-4 accent-primary"
-                    name="invoiceId"
-                    value={invoice.id}
                     checked={selectedIds.includes(invoice.id)}
                     onChange={(event) =>
                       toggleInvoice(invoice.id, event.target.checked)
                     }
                     aria-label={`Vybrat fakturu ${invoice.number}`}
                   />
+                  </label>
                 </TableCell>
                 <TableCell className="font-medium">
                   <Link

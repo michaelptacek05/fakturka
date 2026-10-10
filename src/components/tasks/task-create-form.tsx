@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 
 import { createTask } from "@/app/(app)/projects/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputField, SelectField, TextareaField } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Priority, TaskStatus } from "@/generated/prisma/enums";
 import {
   PRIORITY_LABELS,
@@ -24,50 +25,67 @@ export type TaskProjectOption = {
 type TaskCreateFormProps = {
   /** Na detailu projektu je projekt daný a výběr se nezobrazuje. */
   fixedProjectId?: string;
+  /** Nadpis a tlačítko zůstanou v řádku, formulář se otevře pod nimi. */
+  header?: ReactNode;
   projects: TaskProjectOption[];
   returnTo: string;
 };
 
 export function TaskCreateForm({
   fixedProjectId,
+  header,
   projects,
   returnTo,
 }: TaskCreateFormProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const formId = useId();
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  if (projects.length === 0 && !fixedProjectId) {
-    return null;
+  function closeForm() {
+    setIsOpen(false);
+    triggerRef.current?.focus();
   }
 
-  if (!isOpen) {
-    return (
-      <Button type="button" onClick={() => setIsOpen(true)}>
+  const trigger = projects.length === 0 && !fixedProjectId ? null : (
+    <Button
+      ref={triggerRef}
+      type="button"
+      variant={isOpen ? "outline" : "default"}
+      aria-expanded={isOpen}
+      aria-controls={formId}
+      onClick={() => (isOpen ? closeForm() : setIsOpen(true))}
+    >
+      {isOpen ? (
+        <X className="size-4" aria-hidden="true" />
+      ) : (
         <Plus className="size-4" aria-hidden="true" />
-        Přidat úkol
-      </Button>
-    );
-  }
+      )}
+      {isOpen ? "Zavřít formulář" : "Přidat úkol"}
+    </Button>
+  );
 
-  return (
-    <Card className="w-full">
+  const form = isOpen ? (
+    <Card className="w-full min-w-0">
       <CardContent>
-        <form action={createTask} className="space-y-4">
+        <form
+          id={formId}
+          action={createTask}
+          className="space-y-4"
+          aria-labelledby={`${formId}-title`}
+        >
           <input type="hidden" name="returnTo" value={returnTo} />
           {fixedProjectId ? (
             <input type="hidden" name="projectId" value={fixedProjectId} />
           ) : null}
 
-          <div className="flex items-start justify-between gap-4">
-            <h3 className="text-sm font-medium">Nový úkol</h3>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Zavřít formulář"
-              onClick={() => setIsOpen(false)}
-            >
-              <X className="size-4" aria-hidden="true" />
-            </Button>
+          <div className="space-y-1">
+            <h3 id={`${formId}-title`} className="text-base font-semibold">
+              Nový úkol
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Stačí název{fixedProjectId ? "." : " a projekt."} Ostatní údaje
+              můžete doplnit později.
+            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -127,21 +145,36 @@ export function TaskCreateForm({
             />
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setIsOpen(false)}
+              onClick={closeForm}
             >
               Zrušit
             </Button>
-            <Button type="submit">
+            <SubmitButton pendingLabel="Vytvářím úkol…">
               <Plus className="size-4" aria-hidden="true" />
               Vytvořit úkol
-            </Button>
+            </SubmitButton>
           </div>
         </form>
       </CardContent>
     </Card>
+  ) : null;
+
+  return header ? (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-4 border-b border-border pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">{header}</div>
+        {trigger}
+      </div>
+      {form}
+    </div>
+  ) : (
+    <>
+      {trigger}
+      {form}
+    </>
   );
 }

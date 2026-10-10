@@ -4,7 +4,7 @@ import { KeyRound } from "lucide-react";
 
 import { signIn } from "@/app/login/actions";
 import { Alert } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { InputField } from "@/components/ui/field";
 import { isAuthEnabled, sanitizeRedirectPath } from "@/lib/auth";
 
@@ -95,14 +95,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               required
             />
 
-            <Button type="submit" className="w-full">
+            <SubmitButton type="submit" className="w-full">
               <KeyRound className="size-4" aria-hidden="true" />
               Přihlásit se
-            </Button>
+            </SubmitButton>
           </form>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Heslo se nastavuje proměnnou prostředí AUTH_PASSWORD.
+            Pokud heslo neznáte, obraťte se na správce aplikace.
           </p>
         </div>
       </div>

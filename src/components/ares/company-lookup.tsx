@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -30,12 +30,12 @@ type FieldNames = {
 
 type SearchState = "idle" | "loading" | "ready" | "error";
 
-function setFieldValue(name: string, value: string) {
-  const field = document.querySelector<HTMLInputElement | HTMLSelectElement>(
+function setFieldValue(form: HTMLFormElement | null, name: string, value: string) {
+  const field = form?.querySelector<HTMLInputElement | HTMLSelectElement>(
     `[name="${name}"]`,
   );
 
-  if (!field || value.length === 0) {
+  if (!field) {
     return;
   }
 
@@ -54,10 +54,12 @@ export function CompanyLookup({
   searchType?: "name" | "ico";
 }) {
   const inputId = useId();
+  const sectionRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CompanyResult[]>([]);
   const [state, setState] = useState<SearchState>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedMessage, setSelectedMessage] = useState("");
 
   const resolvedLabel =
     label ??
@@ -72,14 +74,16 @@ export function CompanyLookup({
     const normalizedIco = trimmedQuery.replace(/\D/g, "");
 
     if (
-      searchType === "ico" ? normalizedIco.length < 8 : trimmedQuery.length < 2
+      searchType === "ico" ? normalizedIco.length !== 8 : trimmedQuery.length < 2
     ) {
       setResults([]);
-      setState("idle");
+      setState("error");
+      setErrorMessage(searchType === "ico" ? "Zadejte osmimístné IČO." : "Zadejte alespoň dva znaky názvu firmy.");
       return;
     }
 
     setState("loading");
+    setSelectedMessage("");
     setErrorMessage(null);
 
     try {
@@ -113,28 +117,42 @@ export function CompanyLookup({
   }
 
   function selectCompany(company: CompanyResult) {
-    setFieldValue(fieldNames.name, company.name);
-    setFieldValue(fieldNames.ico, company.ico);
-    setFieldValue(fieldNames.dic, company.dic);
-    setFieldValue(fieldNames.street, company.street);
-    setFieldValue(fieldNames.city, company.city);
-    setFieldValue(fieldNames.postalCode, company.postalCode);
-    setFieldValue(fieldNames.country, company.country);
-    setQuery(company.name);
+    const form = sectionRef.current?.closest("form") ?? null;
+    setFieldValue(form, fieldNames.name, company.name);
+    setFieldValue(form, fieldNames.ico, company.ico);
+    setFieldValue(form, fieldNames.dic, company.dic);
+    setFieldValue(form, fieldNames.street, company.street);
+    setFieldValue(form, fieldNames.city, company.city);
+    setFieldValue(form, fieldNames.postalCode, company.postalCode);
+    setFieldValue(form, fieldNames.country, company.country);
+    setQuery(searchType === "ico" ? company.ico : company.name);
+    setSelectedMessage(`Údaje pro ${company.name} byly předvyplněny. Před uložením je zkontrolujte.`);
     setResults([]);
     setState("idle");
   }
 
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-muted/40 p-4">
+    <section
+      ref={sectionRef}
+      aria-busy={state === "loading"}
+      className="space-y-3 border-b border-border pb-5"
+    >
       <div className="space-y-1.5">
         <Label htmlFor={inputId}>{resolvedLabel}</Label>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             id={inputId}
+            aria-describedby={`${inputId}-status`}
+            aria-invalid={state === "error" || undefined}
             inputMode={searchType === "ico" ? "numeric" : "text"}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setResults([]);
+              setSelectedMessage("");
+              if (state !== "loading") setState("idle");
+            }}
+            disabled={state === "loading"}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
@@ -150,22 +168,18 @@ export function CompanyLookup({
             disabled={state === "loading"}
           >
             {state === "loading" ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
             ) : (
               <Search className="size-4" aria-hidden="true" />
             )}
-            Vyhledat
+            {state === "loading" ? "Vyhledávám…" : "Vyhledat"}
           </Button>
         </div>
       </div>
 
-      {state === "error" && errorMessage ? (
-        <p className="text-sm text-destructive">{errorMessage}</p>
-      ) : null}
-
-      {state === "ready" && results.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nic jsem nenašel.</p>
-      ) : null}
+      <p id={`${inputId}-status`} role="status" aria-live="polite" className={state === "error" ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
+        {state === "error" ? errorMessage : state === "ready" ? results.length === 0 ? "Žádná firma neodpovídá hledání. Údaje můžete vyplnit ručně." : `Nalezeno firem: ${results.length}. Vyberte správnou firmu.` : selectedMessage || "ARES je volitelný. Údaje můžete vyplnit i ručně."}
+      </p>
 
       {results.length > 0 ? (
         <ul className="space-y-2">

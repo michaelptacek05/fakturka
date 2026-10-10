@@ -47,3 +47,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Lokální důkazy vizuální kontroly Impeccable
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/build/
+.impeccable/hook.cache.json

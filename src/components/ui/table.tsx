@@ -7,7 +7,7 @@ function TableWrapper({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="table-wrapper"
-      className={cn("scrollbar-slim w-full overflow-x-auto", className)}
+      className={cn("scrollbar-slim w-full min-w-0 overflow-x-auto", className)}
       {...props}
     />
   );

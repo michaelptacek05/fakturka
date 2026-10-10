@@ -58,8 +58,10 @@ cp .env.example .env
 Spusťte PostgreSQL pro vývoj:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d db
+npm run db
 ```
+
+Aby příkaz fungoval, musí běžet Docker (například Docker Desktop).
 
 Aplikujte migrace:
 
@@ -277,6 +279,7 @@ vystavené faktury, existující doklady si své číslo ponechají.
 
 ```bash
 npm run dev
+npm run db
 npm run build
 npm run lint
 npm run typecheck
@@ -328,7 +331,7 @@ vývojové databáze **založí vlastní** (`<název>_test`) a dotáhnou na ni m
 takže o lokální data nepřijdeš.
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d db
+npm run db
 npm run test:integration
 ```
 
