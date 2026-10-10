@@ -353,6 +353,15 @@ Další plánované kroky:
 - propojení projektů s fakturací (vyfakturováno na projektu),
 - lepší produkční observabilita.
 
+## Agenti a code review
+
+Projekt obsahuje kontroly hlavní větve a všech PR, guidelines pro Codex review
+a GitHub upozornění při selhání CI nebo při nálezu v review. Nastavení propojení
+Codexu přes ChatGPT a aktivaci popisuje [návod pro agenty](docs/agents.md).
+
+Pravidla projektu a code review jsou v [AGENTS.md](AGENTS.md). Logiku notifikací
+ověří `npm run test:agents`.
+
 ## Licence
 
 Projekt je dostupný pod licencí MIT. Podrobnosti jsou v souboru `LICENSE`.

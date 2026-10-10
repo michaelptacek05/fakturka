@@ -1,0 +1,44 @@
+name: Agenti — upozornění na Codex review
+
+on:
+  workflow_run:
+    workflows: ["Agenti — událost Codex review"]
+    types: [completed]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+concurrency:
+  group: codex-notification-${{ github.event.issue.number || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Upozornit na nález nebo chybu review
+    if: >-
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       github.actor == (vars.CODEX_REVIEW_BOT || 'chatgpt-codex-connector[bot]')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout důvěryhodné automatizace
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Oznámit nález
+        uses: actions/github-script@v7
+        env:
+          AGENT_NOTIFY_USER: ${{ vars.AGENT_NOTIFY_USER || github.repository_owner }}
+          CODEX_REVIEW_BOT: ${{ vars.CODEX_REVIEW_BOT || 'chatgpt-codex-connector[bot]' }}
+        with:
+          script: |
+            const { notifyCodex, notifyCodexFromRun } = await import(`${process.env.GITHUB_WORKSPACE}/.github/agents/notify-codex.mjs`);
+            const notify = context.eventName === 'workflow_run' ? notifyCodexFromRun : notifyCodex;
+            await notify({ github, context, core, notifyUser: process.env.AGENT_NOTIFY_USER, botLogin: process.env.CODEX_REVIEW_BOT });
