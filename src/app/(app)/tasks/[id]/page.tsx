@@ -11,6 +11,7 @@ import {
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   Card,
   CardContent,
@@ -222,10 +223,10 @@ export default async function TaskDetailPage({
           </CardContent>
 
           <CardFooter className="justify-end">
-            <Button type="submit">
+            <SubmitButton type="submit">
               <Save className="size-4" aria-hidden="true" />
               Uložit úkol
-            </Button>
+            </SubmitButton>
           </CardFooter>
         </Card>
       </form>
@@ -248,10 +249,10 @@ export default async function TaskDetailPage({
               placeholder="Např. Domluveno s klientem, že se posune termín o týden."
             />
             <div className="flex justify-end">
-              <Button type="submit" size="sm">
+              <SubmitButton type="submit" size="sm">
                 <MessageSquarePlus className="size-4" aria-hidden="true" />
                 Přidat poznámku
-              </Button>
+              </SubmitButton>
             </div>
           </form>
 
@@ -279,14 +280,14 @@ export default async function TaskDetailPage({
                       action={deleteTaskNote.bind(null, note.id, task.id)}
                       message="Opravdu chcete poznámku smazat?"
                     >
-                      <Button
+                      <SubmitButton
                         type="submit"
                         variant="ghost"
                         size="icon-sm"
                         aria-label="Smazat poznámku"
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
-                      </Button>
+                      </SubmitButton>
                     </ConfirmForm>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap text-sm">
@@ -304,10 +305,10 @@ export default async function TaskDetailPage({
         className="flex justify-end"
         message="Opravdu chcete úkol smazat? Zmizí i jeho poznámky."
       >
-        <Button type="submit" variant="destructive-outline" size="sm">
+        <SubmitButton type="submit" variant="destructive-outline" size="sm">
           <Trash2 className="size-4" aria-hidden="true" />
           Smazat úkol
-        </Button>
+        </SubmitButton>
       </ConfirmForm>
     </div>
   );

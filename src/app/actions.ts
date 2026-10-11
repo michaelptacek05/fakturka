@@ -822,6 +822,7 @@ export async function deleteInvoices(formData: FormData) {
     redirect("/invoices?bulkError=empty");
   }
 
+  let deletedCount = 0;
   try {
     const result = await prisma.invoice.deleteMany({
       where: {
@@ -829,12 +830,14 @@ export async function deleteInvoices(formData: FormData) {
       },
     });
 
-    revalidatePath("/");
-    revalidatePath("/invoices");
-    redirect(`/invoices?deleted=${result.count}`);
+    deletedCount = result.count;
   } catch {
     redirect("/invoices?bulkError=db");
   }
+
+  revalidatePath("/");
+  revalidatePath("/invoices");
+  redirect(`/invoices?deleted=${deletedCount}`);
 }
 
 export async function createClient(formData: FormData) {

@@ -5,10 +5,7 @@ import { themeInitScript } from "@/components/layout/theme-toggle";
 
 import "./globals.css";
 
-/**
- * Helvetica Neue se nedá legálně přibalit, takže se bere ze systému. Inter je
- * self-hostovaný fallback pro Windows a Linux — latin-ext kvůli české diakritice.
- */
+/** Lokálně poskytovaný Inter včetně české diakritiky, bez požadavků na Google při návštěvě. */
 const inter = Inter({
   display: "swap",
   subsets: ["latin", "latin-ext"],

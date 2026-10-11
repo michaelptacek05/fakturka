@@ -3,115 +3,84 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design language Fakturky: hluboká lesní zeleň, teple šedé plátno, bílé karty.
- * Odstín 160 drží celou paletu pohromadě — neutrály jsou jen odbarvená zeleň,
- * ne studená šeď, jinak by bílé karty vedle zeleného sidebaru vypadaly fialově.
- */
+/* Fakturka: inkoustová navigace a modré pracovní akce. */
 :root {
   --radius: 0.5rem;
-
-  --background: oklch(0.972 0.004 150);
-  --foreground: oklch(0.2 0.03 160);
-
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.03 160);
-
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.03 160);
-
-  --primary: oklch(0.322 0.063 160);
-  --primary-foreground: oklch(0.987 0.003 150);
-
-  --secondary: oklch(0.945 0.008 150);
-  --secondary-foreground: oklch(0.3 0.035 160);
-
-  --muted: oklch(0.955 0.006 150);
-  --muted-foreground: oklch(0.505 0.02 160);
-
-  --accent: oklch(0.912 0.028 160);
-  --accent-foreground: oklch(0.28 0.055 160);
-
-  --destructive: oklch(0.52 0.175 27);
-  --destructive-foreground: oklch(0.99 0.004 150);
-
-  --success: oklch(0.5 0.115 158);
-  --success-foreground: oklch(0.99 0.004 150);
-
-  --warning: oklch(0.62 0.125 68);
-  --warning-foreground: oklch(0.24 0.04 68);
-
-  --border: oklch(0.905 0.008 150);
-  --input: oklch(0.885 0.01 150);
-  --ring: oklch(0.42 0.075 160);
-
-  /* Rampa grafů vede od brandové zeleně ke světlé mátě, doplňkové jsou stavové. */
-  --chart-1: oklch(0.42 0.085 160);
-  --chart-2: oklch(0.55 0.075 163);
-  --chart-3: oklch(0.68 0.06 160);
-  --chart-4: oklch(0.62 0.125 68);
-  --chart-5: oklch(0.52 0.15 27);
-
-  --sidebar: oklch(0.3 0.058 160);
-  --sidebar-foreground: oklch(0.88 0.022 155);
-  --sidebar-muted: oklch(0.7 0.03 158);
-  /* Nejsilnější inkoust v sidebaru — wordmark a nadpisy na zeleném podkladu. */
-  --sidebar-primary: oklch(0.987 0.003 150);
-  --sidebar-accent: oklch(0.38 0.068 160);
-  --sidebar-accent-foreground: oklch(0.985 0.006 150);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.75 0.06 160);
+  --background: #eef2f7;
+  --foreground: #19243a;
+  --card: #ffffff;
+  --card-foreground: #19243a;
+  --popover: #ffffff;
+  --popover-foreground: #19243a;
+  --primary: #3156d9;
+  --primary-foreground: #ffffff;
+  --secondary: #e8edf5;
+  --secondary-foreground: #283952;
+  --muted: #f1f4f9;
+  --muted-foreground: #58677e;
+  --accent: #e6edff;
+  --accent-foreground: #2447b7;
+  --destructive: #bf303e;
+  --destructive-foreground: #ffffff;
+  --success: #166948;
+  --success-foreground: #ffffff;
+  --warning: #854a0c;
+  --warning-foreground: #3c2a14;
+  --border: #dce3ed;
+  --input: #bcc9da;
+  --ring: #3156d9;
+  --chart-1: #3156d9;
+  --chart-2: #6282e7;
+  --chart-3: #9eb1ec;
+  --chart-4: #9b5b12;
+  --chart-5: #bf303e;
+  --sidebar: #18243e;
+  --sidebar-foreground: #e2e9f5;
+  --sidebar-muted: #aabbd6;
+  --sidebar-primary: #ffffff;
+  --sidebar-accent: #3156d9;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #34435e;
+  --sidebar-ring: #a6bdff;
 }
 
 .dark {
-  --background: oklch(0.168 0.014 162);
-  --foreground: oklch(0.95 0.008 150);
-
-  --card: oklch(0.212 0.016 160);
-  --card-foreground: oklch(0.95 0.008 150);
-
-  --popover: oklch(0.212 0.016 160);
-  --popover-foreground: oklch(0.95 0.008 150);
-
-  --primary: oklch(0.76 0.1 160);
-  --primary-foreground: oklch(0.17 0.03 160);
-
-  --secondary: oklch(0.265 0.018 160);
-  --secondary-foreground: oklch(0.93 0.01 150);
-
-  --muted: oklch(0.248 0.016 160);
-  --muted-foreground: oklch(0.7 0.018 158);
-
-  --accent: oklch(0.305 0.032 160);
-  --accent-foreground: oklch(0.93 0.025 155);
-
-  --destructive: oklch(0.68 0.16 25);
-  --destructive-foreground: oklch(0.16 0.02 160);
-
-  --success: oklch(0.72 0.12 158);
-  --success-foreground: oklch(0.16 0.02 160);
-
-  --warning: oklch(0.78 0.13 72);
-  --warning-foreground: oklch(0.18 0.03 68);
-
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.6 0.09 160);
-
-  --chart-1: oklch(0.7 0.105 160);
-  --chart-2: oklch(0.62 0.085 163);
-  --chart-3: oklch(0.52 0.07 160);
-  --chart-4: oklch(0.75 0.13 72);
-  --chart-5: oklch(0.65 0.16 25);
-
-  --sidebar: oklch(0.238 0.042 160);
-  --sidebar-foreground: oklch(0.88 0.018 155);
-  --sidebar-muted: oklch(0.66 0.03 158);
-  --sidebar-primary: oklch(0.97 0.006 150);
-  --sidebar-accent: oklch(0.335 0.055 160);
-  --sidebar-accent-foreground: oklch(0.96 0.012 150);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.6 0.09 160);
+  --background: #101826;
+  --foreground: #edf1f8;
+  --card: #192338;
+  --card-foreground: #edf1f8;
+  --popover: #192338;
+  --popover-foreground: #edf1f8;
+  --primary: #a4bbff;
+  --primary-foreground: #152348;
+  --secondary: #25324b;
+  --secondary-foreground: #e4ebf7;
+  --muted: #202c42;
+  --muted-foreground: #adbad0;
+  --accent: #2d3c62;
+  --accent-foreground: #d7e2ff;
+  --destructive: #ff99a3;
+  --destructive-foreground: #401722;
+  --success: #76d5ab;
+  --success-foreground: #153728;
+  --warning: #f0c279;
+  --warning-foreground: #3c2a14;
+  --border: #33425c;
+  --input: #4d5d78;
+  --ring: #a4bbff;
+  --chart-1: #a4bbff;
+  --chart-2: #7b99ed;
+  --chart-3: #5471be;
+  --chart-4: #f0c279;
+  --chart-5: #ff99a3;
+  --sidebar: #121c30;
+  --sidebar-foreground: #e2e9f5;
+  --sidebar-muted: #aabbd6;
+  --sidebar-primary: #ffffff;
+  --sidebar-accent: #3156d9;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #34435e;
+  --sidebar-ring: #a6bdff;
 }
 
 @theme inline {
@@ -158,14 +127,8 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /*
-   * Helvetica Neue je na macOS a iOS nativně. Inter stojí před Helvetikou
-   * schválně: Windows mapuje „Helvetica“ na Arial, takže by se k Interu
-   * jinak nikdy nedostalo.
-   */
-  --font-sans:
-    "Helvetica Neue", var(--font-inter), Helvetica, Arial, "Segoe UI",
-    sans-serif;
+  /* Inter je načtený lokálně přes next/font; systémový fallback zachová čitelnost. */
+  --font-sans: var(--font-inter), "Helvetica Neue", "Segoe UI", Arial, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -189,6 +152,7 @@
     font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
+    caret-color: var(--primary);
   }
 
   /*
@@ -199,6 +163,7 @@
   h2,
   h3 {
     letter-spacing: -0.018em;
+    overflow-wrap: anywhere;
   }
 
   ::selection {
@@ -250,11 +215,11 @@
     background-position: right 0.7rem center;
     background-repeat: no-repeat;
     background-size: 1rem;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7a72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%2358677e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
   }
 
   .dark .select-chevron {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a2b0a8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23adbad0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6.5 4 4 4-4'/%3E%3C/svg%3E");
   }
 
   .scrollbar-slim {

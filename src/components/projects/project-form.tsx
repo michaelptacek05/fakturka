@@ -8,6 +8,7 @@ import {
   deleteProject,
   updateProject,
 } from "@/app/(app)/projects/actions";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -165,8 +166,9 @@ export function ProjectForm({
             </div>
           </CardContent>
 
-          <CardFooter className="justify-end">
-            <Button type="submit">
+          <CardFooter className="justify-between">
+            <Button asChild variant="outline"><Link href="/projects">Zrušit</Link></Button>
+            <SubmitButton type="submit">
               {projectId ? (
                 <>
                   <Save className="size-4" aria-hidden="true" />
@@ -178,7 +180,7 @@ export function ProjectForm({
                   Založit projekt
                 </>
               )}
-            </Button>
+            </SubmitButton>
           </CardFooter>
         </Card>
       </form>
@@ -198,10 +200,10 @@ export function ProjectForm({
             }
           }}
         >
-          <Button type="submit" variant="destructive-outline" size="sm">
+          <SubmitButton type="submit" variant="destructive-outline" size="sm">
             <Trash2 className="size-4" aria-hidden="true" />
             Smazat projekt
-          </Button>
+          </SubmitButton>
         </form>
       ) : null}
     </div>

@@ -10,6 +10,7 @@ import {
 import { CompanyLookup } from "@/components/ares/company-lookup";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   Card,
   CardContent,
@@ -173,10 +174,22 @@ export default async function ProfilePage({
         </Alert>
       ) : null}
 
+      <nav aria-label="Sekce nastavení" className="flex flex-wrap gap-2 text-sm">
+        {[
+          ["billing-settings", "Fakturační údaje"],
+          ["payment-settings", "Platební údaje"],
+          ["tax-settings", "Odvody a daně"],
+          ["number-settings", "Číslování"],
+          ...(profile ? [["asset-settings", "Logo a podpis"]] : []),
+        ].map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="inline-flex min-h-11 items-center rounded-lg border border-border bg-card px-3 text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring">{label}</a>
+        ))}
+      </nav>
+
       <form action={upsertProfile}>
         <Card>
           <CardHeader>
-            <CardTitle>Fakturační údaje</CardTitle>
+            <CardTitle id="billing-settings" className="scroll-mt-24">Fakturační údaje</CardTitle>
             <CardDescription>
               Tyto údaje se tisknou na faktuře jako dodavatel.
             </CardDescription>
@@ -255,7 +268,7 @@ export default async function ProfilePage({
           </CardContent>
 
           <CardHeader className="border-t border-b-0">
-            <CardTitle>Platební údaje</CardTitle>
+            <CardTitle id="payment-settings" className="scroll-mt-24">Platební údaje</CardTitle>
             <CardDescription>
               Z těchto údajů se skládá QR platba na faktuře.
             </CardDescription>
@@ -301,7 +314,7 @@ export default async function ProfilePage({
           </CardContent>
 
           <CardHeader className="border-t border-b-0">
-            <CardTitle>Odvody a daně</CardTitle>
+            <CardTitle id="tax-settings" className="scroll-mt-24">Odvody a daně</CardTitle>
             <CardDescription>
               Z těchto hodnot vychází orientační odhad na dashboardu.
             </CardDescription>
@@ -375,7 +388,7 @@ export default async function ProfilePage({
           </CardContent>
 
           <CardHeader className="border-t border-b-0">
-            <CardTitle>Číslování faktur</CardTitle>
+            <CardTitle id="number-settings" className="scroll-mt-24">Číslování faktur</CardTitle>
             <CardDescription>
               Pořadové číslo se resetuje vždy na začátku nového období.
             </CardDescription>
@@ -411,10 +424,10 @@ export default async function ProfilePage({
           </CardContent>
 
           <CardFooter className="justify-end">
-            <Button type="submit">
+            <SubmitButton type="submit">
               <Save className="size-4" aria-hidden="true" />
               Uložit moje údaje
-            </Button>
+            </SubmitButton>
           </CardFooter>
         </Card>
       </form>
@@ -422,7 +435,7 @@ export default async function ProfilePage({
       {profile ? (
         <Card>
           <CardHeader>
-            <CardTitle>Logo, podpis a razítko</CardTitle>
+            <CardTitle id="asset-settings" className="scroll-mt-24">Logo, podpis a razítko</CardTitle>
             <CardDescription>
               Volitelné obrázky pro webovou fakturu i PDF export. PNG, JPG nebo
               WebP do 2 MB.
@@ -442,7 +455,7 @@ export default async function ProfilePage({
 
                 return (
                   <div
-                    className="flex flex-col gap-3 rounded-lg border border-border bg-muted/40 p-4"
+                    className="flex flex-col gap-3"
                     key={assetType}
                   >
                     <h3 className="text-sm font-medium">
@@ -465,7 +478,7 @@ export default async function ProfilePage({
                           {asset.fileName}
                         </p>
                         <form action={deleteInvoiceAsset.bind(null, asset.id)}>
-                          <Button
+                          <SubmitButton
                             type="submit"
                             variant="outline"
                             size="sm"
@@ -473,7 +486,7 @@ export default async function ProfilePage({
                           >
                             <Trash2 className="size-4" aria-hidden="true" />
                             Smazat
-                          </Button>
+                          </SubmitButton>
                         </form>
                       </>
                     ) : (
@@ -488,13 +501,14 @@ export default async function ProfilePage({
                     >
                       <input type="hidden" name="assetType" value={assetType} />
                       <Input
+                        aria-label={`Soubor: ${getInvoiceAssetTypeLabel(assetType)}`}
                         name="assetFile"
                         type="file"
                         accept="image/png,image/jpeg,image/webp"
                         required
                         className="h-auto py-1.5 text-xs"
                       />
-                      <Button
+                      <SubmitButton
                         type="submit"
                         variant="outline"
                         size="sm"
@@ -502,7 +516,7 @@ export default async function ProfilePage({
                       >
                         <Upload className="size-4" aria-hidden="true" />
                         Nahrát
-                      </Button>
+                      </SubmitButton>
                     </form>
                   </div>
                 );

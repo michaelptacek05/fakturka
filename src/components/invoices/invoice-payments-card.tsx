@@ -1,7 +1,7 @@
 import { Plus, Trash2 } from "lucide-react";
 
 import { addInvoicePayment, deleteInvoicePayment } from "@/app/actions";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/ui/submit-button";
 import {
   Card,
   CardContent,
@@ -61,7 +61,7 @@ export function InvoicePaymentsCard({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <dl className="grid gap-3 sm:grid-cols-3">
+        <dl className="grid divide-y divide-border border-b border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
             { label: "Celkem", value: formatCurrency(total) },
             {
@@ -71,7 +71,7 @@ export function InvoicePaymentsCard({
             { label: "Zbývá", value: formatCurrency(remaining) },
           ].map((entry) => (
             <div
-              className="rounded-lg border border-border bg-muted/40 p-3"
+              className="py-3 sm:px-4 sm:first:pl-0 sm:last:pr-0"
               key={entry.label}
             >
               <dt className="text-xs uppercase tracking-wide text-muted-foreground">
@@ -93,14 +93,14 @@ export function InvoicePaymentsCard({
             }
           />
         ) : (
-          <ul className="space-y-2">
+          <ul className="divide-y divide-border">
             {payments.map((payment) => {
               // Vrácení peněz je záporná platba, ať se v příjmech odečte samo.
               const isRefund = toCents(payment.amount) < 0;
 
               return (
               <li
-                className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3"
+                className="flex items-start justify-between gap-3 py-3"
                 key={payment.id}
               >
                 <div className="min-w-0">
@@ -124,7 +124,7 @@ export function InvoicePaymentsCard({
                   action={deleteInvoicePayment.bind(null, payment.id)}
                   message="Opravdu chcete úhradu smazat?"
                 >
-                  <Button
+                  <SubmitButton
                     type="submit"
                     variant="ghost"
                     size="icon-sm"
@@ -133,7 +133,7 @@ export function InvoicePaymentsCard({
                     } z ${formatDate(payment.paidOn)}`}
                   >
                     <Trash2 className="size-4" aria-hidden="true" />
-                  </Button>
+                  </SubmitButton>
                 </ConfirmForm>
               </li>
               );
@@ -169,10 +169,10 @@ export function InvoicePaymentsCard({
             </div>
 
             <div className="flex justify-end">
-              <Button type="submit" size="sm">
+              <SubmitButton type="submit" size="sm">
                 <Plus className="size-4" aria-hidden="true" />
                 Zaevidovat úhradu
-              </Button>
+              </SubmitButton>
             </div>
           </form>
         ) : null}

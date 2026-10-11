@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Download, UserPlus } from "lucide-react";
+import { Download, Search, UserPlus } from "lucide-react";
 
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { InputField } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import {
@@ -30,11 +31,20 @@ async function getProfile() {
   }
 }
 
-async function getClients(profileId: string) {
+async function getClients(profileId: string, query: string) {
   try {
     return await prisma.client.findMany({
       orderBy: { createdAt: "desc" },
-      where: { profileId },
+      where: {
+        profileId,
+        ...(query ? { OR: [
+          { companyName: { contains: query, mode: "insensitive" as const } },
+          { fullName: { contains: query, mode: "insensitive" as const } },
+          { ico: { contains: query } },
+          { email: { contains: query, mode: "insensitive" as const } },
+          { city: { contains: query, mode: "insensitive" as const } },
+        ] } : {}),
+      },
     });
   } catch {
     return null;
@@ -47,6 +57,7 @@ export default async function ClientsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const query = typeof params?.q === "string" ? params.q.trim() : "";
   const profile = await getProfile();
 
   if (!profile) {
@@ -70,7 +81,7 @@ export default async function ClientsPage({
     );
   }
 
-  const clients = await getClients(profile.id);
+  const clients = await getClients(profile.id, query);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -99,6 +110,21 @@ export default async function ClientsPage({
         <Alert variant="success" title="Odběratel byl smazán." />
       ) : null}
 
+      {clients !== null ? (
+        <Card>
+          <CardContent className="p-4">
+            <form method="get" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <InputField name="q" label="Hledat odběratele" placeholder="Jméno, IČO, e-mail nebo město" defaultValue={query} className="flex-1 sm:max-w-sm" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="submit" variant="outline"><Search aria-hidden="true" />Hledat</Button>
+                {query ? <Button asChild variant="ghost"><Link href="/clients">Zrušit hledání</Link></Button> : null}
+              </div>
+              <p className="text-sm text-muted-foreground sm:ml-auto sm:pb-2">{clients.length} odběratelů</p>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {clients === null ? (
         <Alert variant="destructive" title="Databáze není dostupná">
           Spusťte PostgreSQL a migrace, potom stránku obnovte.
@@ -106,10 +132,10 @@ export default async function ClientsPage({
       ) : clients.length === 0 ? (
         <Card>
           <EmptyState
-            title="Zatím žádní odběratelé"
-            description="Přidejte prvního odběratele ručně, nebo naimportujte adresář z Fakturoidu."
+            title={query ? "Žádný odběratel neodpovídá hledání" : "Zatím žádní odběratelé"}
+            description={query ? "Zkuste kratší název nebo jiné IČO." : "Přidejte prvního odběratele ručně, nebo naimportujte adresář z Fakturoidu."}
             action={
-              <div className="flex flex-wrap justify-center gap-2">
+              query ? <Button asChild variant="outline"><Link href="/clients">Zrušit hledání</Link></Button> : <div className="flex flex-wrap justify-center gap-2">
                 <Button asChild>
                   <Link href="/clients/new">Přidat odběratele</Link>
                 </Button>
@@ -122,7 +148,17 @@ export default async function ClientsPage({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          <TableWrapper>
+          <ul className="divide-y divide-border md:hidden" aria-label="Seznam odběratelů">
+            {clients.map((client) => (
+              <li key={client.id} className="p-5">
+                <Link href={`/clients/${client.id}`} className="block break-words text-base font-semibold underline-offset-4 hover:underline">{client.companyName ?? client.fullName ?? "Bez názvu"}</Link>
+                <p className="mt-1 text-sm text-muted-foreground">{client.ico ? `IČO ${client.ico}` : "Bez IČO"}{client.city ? ` · ${client.city}` : ""}</p>
+                {client.email ? <a className="mt-2 inline-flex min-h-11 items-center break-all text-sm text-primary underline-offset-4 hover:underline" href={`mailto:${client.email}`}>{client.email}</a> : null}
+                {client.phone ? <a className="flex min-h-11 items-center text-sm text-primary" href={`tel:${client.phone}`}>{client.phone}</a> : null}
+              </li>
+            ))}
+          </ul>
+          <TableWrapper className="hidden md:block">
             <Table className="min-w-[760px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">

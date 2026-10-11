@@ -110,13 +110,6 @@ export async function PaymentQr({
             {warning}
           </p>
         ))}
-        {/* Ladicí výpis payloadu je jen pro obrazovku, na tisk nepatří. */}
-        <p
-          className="print-hidden mt-1 max-w-[260px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] leading-4 text-zinc-400"
-          title={payload}
-        >
-          {payload}
-        </p>
       </div>
     </div>
   );

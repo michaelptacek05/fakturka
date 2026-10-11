@@ -325,43 +325,50 @@ export default async function InvoiceDetailPage({
         </section>
 
         <section className="py-8">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-zinc-950 text-left">
-                <th className="py-3 pr-3 font-semibold">Položka</th>
-                <th className="px-3 py-3 text-right font-semibold">Množství</th>
-                <th className="px-3 py-3 text-right font-semibold">Cena / j.</th>
-                {isVatPayer ? (
-                  <th className="px-3 py-3 text-right font-semibold">DPH</th>
-                ) : null}
-                <th className="py-3 pl-3 text-right font-semibold">Celkem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.items.map((item) => (
-                <tr
-                  className="border-b border-zinc-200 print-break-inside-avoid"
-                  key={item.id}
-                >
-                  <td className="py-3 pr-3">{item.name}</td>
-                  <td className="px-3 py-3 text-right">
-                    {numberFormatter.format(Number(item.quantity))} {item.unit}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    {formatCurrency(item.unitPrice)}
-                  </td>
+          <div
+            className="overflow-x-auto print:overflow-visible"
+            role="region"
+            aria-label="Položky faktury"
+            tabIndex={0}
+          >
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-950 text-left">
+                  <th className="py-3 pr-3 font-semibold">Položka</th>
+                  <th className="px-3 py-3 text-right font-semibold">Množství</th>
+                  <th className="px-3 py-3 text-right font-semibold">Cena / j.</th>
                   {isVatPayer ? (
-                    <td className="px-3 py-3 text-right">
-                      {numberFormatter.format(Number(item.vatRate))} %
-                    </td>
+                    <th className="px-3 py-3 text-right font-semibold">DPH</th>
                   ) : null}
-                  <td className="py-3 pl-3 text-right font-medium">
-                    {formatCurrency(item.lineTotal)}
-                  </td>
+                  <th className="py-3 pl-3 text-right font-semibold">Celkem</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {invoice.items.map((item) => (
+                  <tr
+                    className="border-b border-zinc-200 print-break-inside-avoid"
+                    key={item.id}
+                  >
+                    <td className="py-3 pr-3">{item.name}</td>
+                    <td className="px-3 py-3 text-right">
+                      {numberFormatter.format(Number(item.quantity))} {item.unit}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      {formatCurrency(item.unitPrice)}
+                    </td>
+                    {isVatPayer ? (
+                      <td className="px-3 py-3 text-right">
+                        {numberFormatter.format(Number(item.vatRate))} %
+                      </td>
+                    ) : null}
+                    <td className="py-3 pl-3 text-right font-medium">
+                      {formatCurrency(item.lineTotal)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
 
         <section className="grid gap-6 border-t border-zinc-300 pt-6 sm:grid-cols-[minmax(0,1fr)_270px] print:grid-cols-[minmax(0,1fr)_270px]">

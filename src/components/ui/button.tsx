@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * karta i tlačítko na ní zůstávají ve stejné výškové rovině.
  */
 const buttonVariants = cva(
-  "inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium transition-[color,background-color,border-color] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg border text-sm font-medium transition-[color,background-color,border-color] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-50 sm:h-10 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -33,10 +33,10 @@ const buttonVariants = cva(
       },
       size: {
         default: "px-4",
-        sm: "h-9 px-3",
+        sm: "h-11 px-3 sm:h-9",
         lg: "h-11 rounded-xl px-6",
-        icon: "size-10",
-        "icon-sm": "size-9",
+        icon: "size-11 sm:size-10",
+        "icon-sm": "size-11 sm:size-9",
       },
     },
     /*

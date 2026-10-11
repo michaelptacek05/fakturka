@@ -58,7 +58,7 @@ export function ThemeToggle() {
       aria-label={
         isDark ? "Přepnout na světlý motiv" : "Přepnout na tmavý motiv"
       }
-      className="flex size-9 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
+      className="flex size-11 cursor-pointer items-center justify-center rounded-lg text-muted-foreground outline-none transition-colors hover:bg-accent/60 hover:text-accent-foreground focus-visible:ring-[3px] focus-visible:ring-ring/35"
       onClick={toggleTheme}
       title={isDark ? "Světlý motiv" : "Tmavý motiv"}
       type="button"
