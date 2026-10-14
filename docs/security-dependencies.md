@@ -21,7 +21,10 @@ jsou proto omezené na jejich konkrétní rodiče:
 | Rodič | Závislost | Vynucená verze | Důvod |
 | --- | --- | --- | --- |
 | `@prisma/config` | `deepmerge-ts` | 8.0.0 | GHSA-ggr8-5vv4-36mx, zpracování cyklických grafů. |
-| `prisma` | `mysql2` | 3.24.6 | GHSA-3f6p-5ww8-9rcr a GHSA-rgwj-5xj2-c3m3. Aplikace nadále používá PostgreSQL. |
+| `prisma` | `mysql2` | 3.24.5 | GHSA-3f6p-5ww8-9rcr a GHSA-rgwj-5xj2-c3m3. Aplikace nadále používá PostgreSQL. |
+
+Verze mysql2 3.24.5 splňuje i lokální nastavení minimálního stáří vydání;
+novější 3.24.6 byla v době kontroly vydaná teprve předchozí den.
 
 Přechod deepmerge-ts z 7 na 8 má [změny chování](https://github.com/RebeccaStevens/deepmerge-ts/releases/tag/v8.0.0),
 zejména slučování Map. Současný `prisma.config.ts` obsahuje obyčejné objekty
@@ -59,6 +62,12 @@ audit celého projektu tedy zůstává relevantní pro nástroje a migrátor.
 ## Ověření
 
 Node 24.11.1, jednorázový PostgreSQL 16, DB testy v `TZ=UTC`:
+
+První běh CI na Node 24.21.0 / npm 11.19.0 odhalil chybějící volitelné
+WASM závislosti v lockfilu vytvořeném starším npm na macOS. Lockfile byl
+doplněn přes npm 11.19.0 z adresáře bez `node_modules` a instalace i níže
+uvedené kontroly poté znovu prošly. Čistá instalace byla ověřena přes
+`npx npm@11.19.0 ci`, tedy stejnou verzí npm jako v CI.
 
 - `npm ci`, `npm run prisma:generate`, `npm run lint`,
   `npm run typecheck`, `npm run build` prošly.

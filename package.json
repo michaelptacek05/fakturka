@@ -58,7 +58,7 @@
       "deepmerge-ts": "8.0.0"
     },
     "prisma": {
-      "mysql2": "3.24.6"
+      "mysql2": "3.24.5"
     }
   }
 }
