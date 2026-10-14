@@ -33,6 +33,7 @@ import {
   type ImportPreview,
 } from "@/lib/fakturoid-import";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { calculateInvoiceLine, moneyToCents, sumInvoiceLines } from "@/lib/invoice-calculations";
 
 const PREVIEW_ROW_LIMIT = 8;
 
@@ -63,11 +64,11 @@ function SubmitButton({ count }: { count: number }) {
 }
 
 function invoiceTotal(invoice: ImportedInvoice) {
-  return invoice.items.reduce((sum, item) => {
-    const subtotal = item.quantity * item.unitPrice;
-
-    return sum + subtotal + subtotal * (item.vatRate / 100);
-  }, 0);
+  return sumInvoiceLines(invoice.items.map((item) => calculateInvoiceLine({
+    quantity: item.quantity,
+    unitPriceCents: moneyToCents(item.unitPrice),
+    vatRate: item.vatRate,
+  }))).totalCents / 100;
 }
 
 export function CsvImportCard({

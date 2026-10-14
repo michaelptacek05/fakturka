@@ -21,6 +21,7 @@ Tento projekt je vibe coded. Vzniká iterativně s pomocí AI asistenta, s důra
 - Poznámky u úkolů s datem a časem.
 - Hromadný výběr faktur, mazání a CSV export přehledu.
 - Výpočty položek, DPH a celkové částky v CZK.
+- Množství položek až na 9 desetinných míst, včetně importu a web/PDF výstupu.
 - Detail faktury v A4 rozložení vhodném pro tisk.
 - QR platba ve formátu SPAYD.
 - Server-side PDF export faktury.
@@ -334,6 +335,36 @@ takže o lokální data nepřijdeš.
 npm run db
 npm run test:integration
 ```
+
+### Testy v prohlížeči (E2E)
+
+Malá sada Playwright testů běží proti produkčnímu buildu v Chromium. Ověřuje
+přihlášení a ochranu dat, vystavení a editaci faktury, shodu náhledu s uložením,
+vyšší přesnost množství, částečnou úhradu a doplacení, skutečný QR na webu
+i ve vyrenderovaném PDF a import s náhledem, potvrzením a opakováním.
+
+Potřebuje Chromium a Poppler (`pdftotext`, `pdftoppm`). Na macOS nainstalujte
+Poppler přes `brew install poppler`; na Ubuntu přes `apt-get install poppler-utils`.
+
+```bash
+npx playwright install chromium
+npm run build
+DATABASE_URL=postgresql://fakturka:test-only@127.0.0.1:5432/fakturka npm run test:e2e
+```
+
+Použijte **jednorázový lokální PostgreSQL**, nikdy produkční připojení. Příklad
+URL nahraďte syntetickými údaji své testovací instance. Runner záměrně nečte
+`.env`, vyžaduje explicitní `DATABASE_URL`, vytvoří databázi s unikátním názvem,
+aplikuje migrace a po běhu ji odstraní. Používá vlastní testovací heslo,
+produkční server na `127.0.0.1:3100` (volitelně `E2E_PORT`) a jeden worker.
+Existující server nepřebírá. Výsledky při selhání jsou v `test-results/`.
+CI používá Node 24 a PostgreSQL 16; E2E je součástí kontroly před publikací image.
+
+Množství se ukládá jako `Decimal(18,9)` bez převodu přes JavaScriptové číslo;
+hodnoty nad 9 desetinných míst nebo mimo kladný rozsah pod 1 miliardu se
+odmítnou. Ceny a výsledky zůstávají v haléřích: nejprve se zaokrouhlí základ
+každé položky, poté její DPH a nakonec se sečtou položky. Rozšíření přesnosti
+nepřepočítává historické doklady a nedokáže obnovit dříve oříznuté číslice.
 
 ## Stav projektu
 

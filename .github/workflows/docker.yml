@@ -98,9 +98,62 @@ jobs:
       - name: Integrační testy
         run: npm run test:integration
 
+  e2e:
+    name: E2E hlavních toků
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://fakturka:ci-only@localhost:5432/fakturka
+      NEXT_TELEMETRY_DISABLED: 1
+      TZ: UTC
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fakturka
+          POSTGRES_USER: fakturka
+          POSTGRES_PASSWORD: ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fakturka -d fakturka"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Nastavit Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Instalace závislostí
+        run: npm ci
+      - name: Generovat Prisma klienta
+        run: npm run prisma:generate
+      - name: Nainstalovat Chromium a nástroje pro kontrolu PDF
+        run: |
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils fonts-dejavu-core
+      - name: Produkční build
+        run: npm run build
+      - name: E2E testy
+        run: npm run test:e2e
+      - name: Důkazy při selhání
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
+
   build-and-push:
     name: Build a push image
-    needs: [verify, integration]
+    needs: [verify, integration, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30

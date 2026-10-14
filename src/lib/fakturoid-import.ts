@@ -10,6 +10,7 @@
  */
 
 import { findColumnIndex, getCell, parseCsv } from "@/lib/csv";
+import Decimal from "decimal.js";
 
 export type ImportedClient = {
   city: string;
@@ -25,7 +26,7 @@ export type ImportedClient = {
 
 export type ImportedInvoiceItem = {
   name: string;
-  quantity: number;
+  quantity: string | number;
   unit: string;
   unitPrice: number;
   vatRate: number;
@@ -127,7 +128,7 @@ const INVOICE_COLUMNS = {
  * Čísla přicházejí v české i anglické notaci ("1 234,56" i "1234.56").
  * Rozhoduje poslední oddělovač v řetězci.
  */
-export function parseImportedNumber(value: string) {
+function normalizeImportedNumber(value: string) {
   const cleaned = value.replace(/[\s '"]/g, "").replace(/[A-Za-zČčKk]+$/, "");
 
   if (cleaned.length === 0) {
@@ -147,9 +148,22 @@ export function parseImportedNumber(value: string) {
     normalized = cleaned.replace(",", ".");
   }
 
-  const parsed = Number.parseFloat(normalized);
+  return normalized;
+}
+
+export function parseImportedNumber(value: string) {
+  const parsed = Number.parseFloat(normalizeImportedNumber(value) ?? "");
 
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseImportedQuantity(value: string) {
+  try {
+    const quantity = new Decimal(normalizeImportedNumber(value) ?? "");
+    return quantity.isFinite() && quantity.greaterThan(0) ? quantity.toString() : "1";
+  } catch {
+    return "1";
+  }
 }
 
 /** Vrací datum jako ISO řetězec `YYYY-MM-DD`, nebo null. */
@@ -466,11 +480,11 @@ export function previewInvoiceImport(
       return;
     }
 
-    const quantity = parseImportedNumber(getCell(row, map.itemQuantity));
+    const quantity = parseImportedQuantity(getCell(row, map.itemQuantity));
 
     invoice.items.push({
       name: itemName.length > 0 ? itemName : "Fakturovaná položka",
-      quantity: quantity && quantity > 0 ? quantity : 1,
+      quantity,
       unit: getCell(row, map.itemUnit) || "ks",
       unitPrice: unitPrice ?? 0,
       vatRate: parseImportedNumber(getCell(row, map.itemVatRate)) ?? 0,

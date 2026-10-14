@@ -87,7 +87,7 @@ describe("částky a množství", () => {
   });
 
   it("množství musí být kladné", () => {
-    expect(normalizeQuantity("2,5")).toBe(2.5);
+    expect(normalizeQuantity("2,5")).toBe("2.5");
     expect(() => normalizeQuantity("0")).toThrow(ValidationError);
   });
 

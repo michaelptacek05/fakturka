@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 
 import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
+import { formatQuantity } from "@/lib/invoice-calculations";
 import { getInvoiceAssetAbsolutePath } from "@/lib/invoice-assets";
 import { fromCents, getPaymentSummary } from "@/lib/invoice-payment";
 import {
@@ -658,9 +659,17 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
   let rowY = drawItemsHeader(document, symbolsTop + 60, columns, fonts);
 
   invoice.items.forEach((item) => {
+    const quantityText = `${formatQuantity(item.quantity)} ${item.unit}`;
+    // Vyšší přesnost se může zalomit. Výška musí zahrnout celý text,
+    // jinak by se další položka nebo oddělovací linka překryla s množstvím.
+    const rowHeight = Math.max(
+      ITEM_ROW_HEIGHT,
+      document.heightOfString(item.name, { width: columns.name.width }) + 14,
+      document.heightOfString(quantityText, { width: columns.quantity.width }) + 14,
+    );
     // Řádek, který by přetekl přes spodní okraj, patří až na další stránku.
     // Bez toho zalomí PDFKit sám a `rowY` přestane odpovídat skutečnosti.
-    if (rowY + ITEM_ROW_HEIGHT > contentBottom) {
+    if (rowY + rowHeight > contentBottom) {
       document.addPage();
       rowY = drawItemsHeader(document, document.page.margins.top, columns, fonts);
     }
@@ -669,7 +678,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       width: columns.name.width,
     });
     document.text(
-      `${numberFormatter.format(Number(item.quantity))} ${item.unit}`,
+      quantityText,
       columns.quantity.x,
       rowY,
       { align: "right", width: columns.quantity.width },
@@ -691,7 +700,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       width: columns.total.width,
     });
     document.font(fonts.regular);
-    rowY += ITEM_ROW_HEIGHT;
+    rowY += rowHeight;
     document.moveTo(40, rowY - 8).lineTo(555, rowY - 8).strokeColor("#e4e4e7").stroke();
   });
 

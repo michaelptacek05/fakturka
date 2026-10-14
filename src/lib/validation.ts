@@ -1,3 +1,4 @@
+import { moneyToCents, normalizeItemQuantity } from "@/lib/invoice-calculations";
 import {
   isValidCzechAccountNumber,
   isValidIban,
@@ -63,7 +64,7 @@ export function getValidationMessage(error?: string | string[]) {
     case "payment":
       return "Úhrada musí být kladná částka a nesmí překročit zbývající částku faktury.";
     case "quantity":
-      return "Množství položky musí být větší než nula.";
+      return "Množství musí být kladné, menší než 1 000 000 000 a mít nejvýše 9 desetinných míst.";
     case "db":
       return "Databáze není dostupná. Zkuste to prosím znovu.";
     case "notfound":
@@ -217,7 +218,7 @@ export function normalizeMoneyToCents(value: FormDataEntryValue | null) {
     throw new ValidationError("amount", "Částka musí být nezáporné číslo.");
   }
 
-  return Math.round(parsed * 100);
+  return moneyToCents(parsed);
 }
 
 export function normalizeQuantity(value: FormDataEntryValue | null) {
@@ -225,13 +226,11 @@ export function normalizeQuantity(value: FormDataEntryValue | null) {
     throw new ValidationError("quantity", "Množství je povinné.");
   }
 
-  const parsed = Number.parseFloat(value.replace(/\s/g, "").replace(",", "."));
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new ValidationError("quantity", "Množství musí být větší než nula.");
+  try {
+    return normalizeItemQuantity(value.replace(/\s/g, "").replace(",", "."));
+  } catch {
+    throw new ValidationError("quantity", "Množství je mimo podporovaný rozsah nebo přesnost.");
   }
-
-  return parsed;
 }
 
 export function normalizeVatRate(value: FormDataEntryValue | null) {

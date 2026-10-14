@@ -37,6 +37,7 @@ import {
   removeStoredInvoiceAsset,
 } from "@/lib/invoice-assets";
 import { prisma } from "@/lib/prisma";
+import { calculateInvoiceLine, sumInvoiceLines } from "@/lib/invoice-calculations";
 import {
   getOptionalFormString,
   getRequiredFormString,
@@ -134,9 +135,9 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
       const vatRate = isVatPayer
         ? normalizeVatRate(vatRates[index] ?? null)
         : 0;
-      const lineSubtotalCents = Math.round(quantity * unitPriceCents);
-      const lineVatCents = Math.round(lineSubtotalCents * (vatRate / 100));
-      const lineTotalCents = lineSubtotalCents + lineVatCents;
+      const { lineSubtotalCents, lineVatCents, lineTotalCents } = calculateInvoiceLine({
+        quantity, unitPriceCents, vatRate,
+      });
 
       return {
         lineSubtotalCents,
@@ -159,7 +160,7 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
       lineVatCents: number;
       name: string;
       position: number;
-      quantity: number;
+      quantity: string;
       unit: string;
       unitPriceCents: number;
       vatRate: number;
@@ -169,12 +170,7 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
     throw new ValidationError("item", "Faktura musí mít alespoň jednu položku.");
   }
 
-  const subtotalCents = items.reduce(
-    (sum, item) => sum + item.lineSubtotalCents,
-    0,
-  );
-  const vatTotalCents = items.reduce((sum, item) => sum + item.lineVatCents, 0);
-  const totalCents = subtotalCents + vatTotalCents;
+  const { subtotalCents, vatTotalCents, totalCents } = sumInvoiceLines(items);
 
   const clientData = buildClientData(formData);
   const clientLookup = [
@@ -409,7 +405,7 @@ export async function createInvoice(formData: FormData) {
               lineVat: decimalFromCents(item.lineVatCents),
               name: item.name,
               position: index + 1,
-              quantity: item.quantity.toFixed(3),
+              quantity: item.quantity,
               unit: item.unit,
               unitPrice: decimalFromCents(item.unitPriceCents),
               vatRate: item.vatRate.toFixed(2),
@@ -513,7 +509,7 @@ export async function updateInvoice(invoiceId: string, formData: FormData) {
               lineVat: decimalFromCents(item.lineVatCents),
               name: item.name,
               position: index + 1,
-              quantity: item.quantity.toFixed(3),
+              quantity: item.quantity,
               unit: item.unit,
               unitPrice: decimalFromCents(item.unitPriceCents),
               vatRate: item.vatRate.toFixed(2),

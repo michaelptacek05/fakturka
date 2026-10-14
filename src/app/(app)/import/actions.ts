@@ -17,6 +17,8 @@ import {
   type ImportedInvoice,
 } from "@/lib/fakturoid-import";
 import { prisma } from "@/lib/prisma";
+import { calculateInvoiceLine, moneyToCents, sumInvoiceLines } from "@/lib/invoice-calculations";
+import { getValidationErrorParam, normalizeQuantity, ValidationError } from "@/lib/validation";
 
 /** Payload chodí z prohlížeče, takže se na serveru kontroluje znovu od nuly. */
 function readPayload<TRecord>(formData: FormData): TRecord[] {
@@ -46,7 +48,7 @@ function toDateOrNull(value: string | null | undefined) {
 }
 
 function toCents(value: number) {
-  return Math.round(value * 100);
+  return moneyToCents(value);
 }
 
 function sanitizeText(value: unknown, fallback = "") {
@@ -281,9 +283,11 @@ export async function importInvoices(formData: FormData) {
 
       const normalizedItems = items.map((item, index) => {
         const quantity =
-          typeof item.quantity === "number" && item.quantity > 0
-            ? item.quantity
-            : 1;
+          normalizeQuantity(
+            typeof item.quantity === "number" || typeof item.quantity === "string"
+              ? String(item.quantity)
+              : "1",
+          );
         const unitPriceCents = toCents(
           typeof item.unitPrice === "number" ? item.unitPrice : 0,
         );
@@ -291,12 +295,13 @@ export async function importInvoices(formData: FormData) {
           typeof item.vatRate === "number" && item.vatRate >= 0 && item.vatRate <= 100
             ? item.vatRate
             : 0;
-        const lineSubtotalCents = Math.round(quantity * unitPriceCents);
-        const lineVatCents = Math.round(lineSubtotalCents * (vatRate / 100));
+        const { lineSubtotalCents, lineVatCents, lineTotalCents } = calculateInvoiceLine({
+          quantity, unitPriceCents, vatRate,
+        });
 
         return {
           lineSubtotalCents,
-          lineTotalCents: lineSubtotalCents + lineVatCents,
+          lineTotalCents,
           lineVatCents,
           name: sanitizeText(item.name, "Fakturovaná položka"),
           position: index + 1,
@@ -307,14 +312,7 @@ export async function importInvoices(formData: FormData) {
         };
       });
 
-      const subtotalCents = normalizedItems.reduce(
-        (sum, item) => sum + item.lineSubtotalCents,
-        0,
-      );
-      const vatTotalCents = normalizedItems.reduce(
-        (sum, item) => sum + item.lineVatCents,
-        0,
-      );
+      const { subtotalCents, vatTotalCents, totalCents } = sumInvoiceLines(normalizedItems);
 
       const paidAt = toDateOrNull(record.paidAt);
       const status =
@@ -323,7 +321,6 @@ export async function importInvoices(formData: FormData) {
           : record.status === "PAID"
             ? InvoiceStatus.PAID
             : InvoiceStatus.ISSUED;
-      const totalCents = subtotalCents + vatTotalCents;
       // Přeplatek ze zdroje osekáváme, jinak by nesedělo `paidAmount` s celkem.
       const reportedPaidCents =
         typeof record.paidAmount === "number" && record.paidAmount > 0
@@ -360,7 +357,7 @@ export async function importInvoices(formData: FormData) {
               lineVat: decimalFromCents(item.lineVatCents),
               name: item.name,
               position: item.position,
-              quantity: item.quantity.toFixed(3),
+              quantity: item.quantity,
               unit: item.unit,
               unitPrice: decimalFromCents(item.unitPriceCents),
               vatRate: item.vatRate.toFixed(2),
@@ -402,8 +399,8 @@ export async function importInvoices(formData: FormData) {
     }
 
     await syncSequenceAfterImport(profileId);
-  } catch {
-    redirect("/import?error=db");
+  } catch (error) {
+    redirect(`/import?error=${error instanceof ValidationError ? getValidationErrorParam(error) : "db"}`);
   }
 
   revalidatePath("/");

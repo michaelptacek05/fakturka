@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
+import { formatQuantity } from "@/lib/invoice-calculations";
 import {
   fromCents,
   getInvoiceVisualState,
@@ -351,7 +352,7 @@ export default async function InvoiceDetailPage({
                   >
                     <td className="py-3 pr-3">{item.name}</td>
                     <td className="px-3 py-3 text-right">
-                      {numberFormatter.format(Number(item.quantity))} {item.unit}
+                      {formatQuantity(item.quantity)} {item.unit}
                     </td>
                     <td className="px-3 py-3 text-right">
                       {formatCurrency(item.unitPrice)}

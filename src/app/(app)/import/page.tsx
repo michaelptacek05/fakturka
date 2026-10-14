@@ -12,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { getValidationMessage } from "@/lib/validation";
 
 export const metadata: Metadata = {
   title: "Import dat — Fakturka",
@@ -34,7 +35,7 @@ function getErrorMessage(error: string | undefined) {
     case "empty":
       return "Nebyly předány žádné záznamy k importu.";
     default:
-      return null;
+      return getValidationMessage(error);
   }
 }
 
