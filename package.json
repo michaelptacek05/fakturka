@@ -42,7 +42,7 @@
   "devDependencies": {
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.20.0",
     "@types/pngjs": "^6.0.5",
