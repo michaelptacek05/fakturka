@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -42,6 +43,7 @@ export default async function NewInvoicePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const profile = await getProfile();
   const issueDate = new Date();

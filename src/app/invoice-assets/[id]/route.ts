@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import fs from "node:fs/promises";
 
 import { notFound } from "next/navigation";
@@ -16,6 +17,7 @@ type InvoiceAssetRouteProps = {
 };
 
 export async function GET(_request: Request, { params }: InvoiceAssetRouteProps) {
+  await requireSession();
   const { id } = await params;
   const asset = await prisma.invoiceAsset.findUnique({
     where: { id },

@@ -165,3 +165,13 @@ export function getCell(row: string[], index: number) {
 export function toCsvValue(value: string) {
   return /[";\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
+
+/** Textová pole CSV pro tabulkové editory; číselné hodnoty se exportují zvlášť. */
+export function toSpreadsheetCsvCell(value: string | number | null | undefined, numeric = false) {
+  const text = value == null ? "" : String(value);
+  const isNumber = numeric && /^-?\d+(?:\.\d+)?$/.test(text);
+  const safeText = !isNumber && typeof value === "string" && /^[\s\u0000-\u001f]*[=+\-@＝＋－＠]/u.test(text)
+    ? `\t${text}`
+    : text;
+  return `"${safeText.replace(/"/g, '""')}"`;
+}

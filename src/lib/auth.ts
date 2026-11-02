@@ -18,13 +18,16 @@ export function getAuthPassword() {
 }
 
 export function isAuthEnabled() {
+  if (process.env.AUTH_REQUIRED === "true" && (!getAuthPassword() || !process.env.AUTH_SECRET?.trim())) {
+    throw new Error("Pro toto nasazení musí být nastaveno heslo i podpisový klíč.");
+  }
   return getAuthPassword() !== null;
 }
 
 export function getSessionMaxAgeSeconds() {
-  const hours = Number.parseInt(process.env.AUTH_SESSION_HOURS ?? "", 10);
+  const hours = Number(process.env.AUTH_SESSION_HOURS ?? "");
   const safeHours =
-    Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_SESSION_HOURS;
+    Number.isInteger(hours) && hours > 0 && hours <= 8760 ? hours : DEFAULT_SESSION_HOURS;
 
   return safeHours * 60 * 60;
 }
@@ -96,7 +99,8 @@ export async function verifyPassword(candidate: string) {
 
 export async function createSessionToken() {
   const expiresAt = Date.now() + getSessionMaxAgeSeconds() * 1000;
-  const payload = String(expiresAt);
+  const nonce = toBase64Url(crypto.getRandomValues(new Uint8Array(32)));
+  const payload = `${expiresAt}.${nonce}`;
 
   return `${payload}.${await sign(payload)}`;
 }
@@ -106,7 +110,11 @@ export async function verifySessionToken(token: string | undefined | null) {
     return false;
   }
 
-  const separatorIndex = token.indexOf(".");
+  if (!/^\d{13,16}\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(token)) {
+    return false;
+  }
+
+  const separatorIndex = token.lastIndexOf(".");
 
   if (separatorIndex <= 0) {
     return false;
@@ -127,9 +135,23 @@ export async function verifySessionToken(token: string | undefined | null) {
  * Ochrana proti otevřenému přesměrování: povolíme jen cestu v rámci aplikace.
  */
 export function sanitizeRedirectPath(value: string | null | undefined) {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+  if (
+    typeof value !== "string" || !value.startsWith("/") || value.startsWith("//") ||
+    /[\\\u0000-\u0020\u007f]/.test(value)
+  ) {
     return "/";
   }
+  const base = "https://fakturka.invalid";
+  try {
+    const url = new URL(value, base);
+    return url.origin === base && !url.pathname.startsWith("//")
+      ? `${url.pathname}${url.search}${url.hash}` : "/";
+  } catch {
+    return "/";
+  }
+}
 
-  return value;
+/** Otisky slouží pro session a limiter; do databáze neukládáme token ani IP. */
+export async function getAuthFingerprint(value: string) {
+  return sign(value);
 }

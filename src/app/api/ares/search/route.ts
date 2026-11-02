@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import { NextResponse } from "next/server";
 
 type AresAddress = {
@@ -77,6 +78,7 @@ function isRateLimited() {
 }
 
 export async function GET(request: Request) {
+  await requireSession();
   const { searchParams } = new URL(request.url);
   const query = searchParams.get("q")?.trim() ?? "";
   const icoParam = searchParams.get("ico")?.trim();

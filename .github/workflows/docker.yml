@@ -38,6 +38,9 @@ jobs:
       - name: Instalace závislostí
         run: npm ci
 
+      - name: Bezpečnost produkčních závislostí
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Generovat Prisma klienta
         run: npm run prisma:generate
 

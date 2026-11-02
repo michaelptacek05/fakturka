@@ -10,6 +10,7 @@
  */
 
 import { findColumnIndex, getCell, parseCsv } from "@/lib/csv";
+import { getInvoiceImportLimitError } from "@/lib/import-limits";
 import Decimal from "decimal.js";
 
 export type ImportedClient = {
@@ -57,6 +58,7 @@ export type ImportIssue = {
 };
 
 export type ImportPreview<TRecord> = {
+  blockingError?: string | null;
   issues: ImportIssue[];
   matchedColumns: string[];
   missingColumns: string[];
@@ -349,6 +351,7 @@ export function previewClientImport(
 
 export function previewInvoiceImport(
   csvText: string,
+  existingNumbers: readonly string[] = [],
 ): ImportPreview<ImportedInvoice> {
   const table = parseCsv(csvText);
   const issues: ImportIssue[] = [];
@@ -526,6 +529,7 @@ export function previewInvoiceImport(
   }
 
   return {
+    blockingError: getInvoiceImportLimitError(records, existingNumbers),
     issues,
     matchedColumns: matched,
     missingColumns: missing,

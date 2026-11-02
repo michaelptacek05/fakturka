@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { Search } from "lucide-react";
 
@@ -76,6 +77,7 @@ export default async function TasksPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const projectFilter =
     typeof params?.project === "string" ? params.project : "";

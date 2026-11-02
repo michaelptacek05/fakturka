@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { FolderPlus } from "lucide-react";
 
@@ -49,6 +50,7 @@ export default async function ProjectsPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const projects = await getProjects();
 

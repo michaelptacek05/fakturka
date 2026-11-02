@@ -28,6 +28,7 @@ test.beforeEach(async () => {
     throw new Error("Reset je povolen jen v databázi vytvořené E2E runnerem.");
   }
   await db.query('TRUNCATE "UserProfile" CASCADE');
+  await db.query('TRUNCATE "LoginThrottle", "AuthSession"');
   await db.query(`INSERT INTO "UserProfile"
     (id, "displayName", street, city, "postalCode", ico, "accountNumber", "bankCode", "updatedAt")
     VALUES ('test-profile', 'Testovací OSVČ', 'Testovací 1', 'Praha', '11000', '00000019', '2000145399', '0800', CURRENT_TIMESTAMP)`);
@@ -63,6 +64,11 @@ function decodePng(data: Buffer) {
 }
 
 test("přihlášení chrání doklady, export, PDF, assety i přímé odeslání akce", async ({ page, request }) => {
+  const login = await request.get("/login");
+  expect(login.headers()["x-frame-options"]).toBe("DENY");
+  expect(login.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(login.headers()["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(login.headers()["x-powered-by"]).toBeUndefined();
   for (const url of ["/invoices", "/invoices/export?ids=test", "/invoices/test/pdf", "/invoice-assets/test"]) {
     const response = await request.get(url, { maxRedirects: 0 });
     expect(response.status()).toBe(307);
@@ -91,6 +97,23 @@ test("přihlášení chrání doklady, export, PDF, assety i přímé odeslání
   expect(response.status()).toBe(307);
   expect(response.headers().location).toContain("/login");
   expect(await invoiceCount()).toBe(0);
+});
+
+test("návrat po přihlášení zůstane lokální a odhlášení zneplatní původní cookie", async ({ page, request }) => {
+  await page.goto("/login?next=%2F%5Cexample.invalid");
+  await page.locator('[name="password"]').fill("e2e-only-password");
+  await page.getByRole("button", { name: "Přihlásit se", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`^${new URL(page.url()).origin}/$`));
+  const session = (await page.context().cookies()).find((cookie) => cookie.name === "fakturka_session");
+  expect(session?.httpOnly).toBe(true);
+  expect(session?.secure).toBe(true);
+  await page.getByRole("button", { name: "Odhlásit se", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/login$/);
+  const replay = await request.get("/invoices", {
+    headers: { Cookie: `fakturka_session=${session!.value}` }, maxRedirects: 0,
+  });
+  expect(replay.status()).toBe(307);
+  expect(replay.headers().location).toContain("/login");
 });
 
 test("náhled, uložení, editace a PDF zachovají přesné množství a stejné částky", async ({ page }, info) => {
@@ -190,4 +213,60 @@ test("CSV náhled nic nezapíše, potvrzení zachová přesnost a opakovaný imp
   await page.getByRole("button", { name: "Importovat 1", exact: true }).click();
   await expect(page).toHaveURL(/invoicesCreated=0&invoicesSkipped=1/);
   expect(await invoiceCount()).toBe(1);
+});
+
+test("náhled vysvětlí překročený limit a zabrání potvrzení importu", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/import");
+  const csv = "number;client_name;issued_on;lines__line__name;lines__line__quantity;lines__line__unit_price\n" +
+    "LIMIT;Test;2026-11-01;Položka;1;1\n".repeat(501);
+  await page.locator('input[type="file"]').last().setInputFiles({ name: "limit.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await expect(page.getByRole("alert").filter({ hasText: "Faktura LIMIT" })).toContainText("Limit je 500 položek na fakturu");
+  await expect(page.getByRole("button", { name: "Importovat 1", exact: true })).toBeDisabled();
+  expect(await invoiceCount()).toBe(0);
+});
+
+test("náhled nezablokuje starší existující fakturu nad limitem", async ({ page }) => {
+  await signIn(page);
+  await fillInvoice(page, "1", "100");
+  const id = await submitInvoice(page);
+  await db.query('UPDATE "Invoice" SET number = $1 WHERE id = $2', ["LEGACY", id]);
+  const before = await readInvoice(id);
+  await page.goto("/import");
+  const csv = "number;client_name;issued_on;lines__line__name;lines__line__quantity;lines__line__unit_price\n" +
+    "LEGACY;Test;2026-11-01;Položka;1;1\n".repeat(501) +
+    "NEW;Test;2026-11-01;Položka;1;50\n";
+  await page.locator('input[type="file"]').last().setInputFiles({ name: "legacy.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  const submit = page.getByRole("button", { name: "Importovat 2", exact: true });
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page).toHaveURL(/invoicesCreated=1&invoicesSkipped=1/);
+  expect(await readInvoice(id)).toEqual(before);
+  expect(await invoiceCount()).toBe(2);
+});
+
+test("import EUR zůstane v EUR na webu i v PDF a nevstupuje do korunových příjmů", async ({ page }, info) => {
+  await signIn(page);
+  const csv = "number;client_name;issued_on;currency;status;paid_on;lines__line__name;lines__line__quantity;lines__line__unit_price\n" +
+    "EUR-PAID;Euro odběratel;2026-11-01;EUR;paid;2026-11-01;Euro práce;1;900\n" +
+    "EUR-OPEN;Euro odběratel;2026-11-01;EUR;issued;;Euro práce;1;123\n";
+  await page.goto("/import");
+  await page.locator('input[type="file"]').last().setInputFiles({ name: "eur.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await page.getByRole("button", { name: "Importovat 2", exact: true }).click();
+  await expect(page).toHaveURL(/invoicesCreated=2/);
+  await page.goto("/");
+  await expect(page.locator("main")).not.toContainText("900,00");
+  await expect(page.locator("main")).not.toContainText("123,00");
+  const invoice = (await db.query('SELECT id FROM "Invoice" WHERE number=$1', ["EUR-OPEN"])).rows[0];
+  await page.goto(`/invoices/${invoice.id}`);
+  await expect(page.getByRole("region", { name: "Položky faktury" })).toContainText(/123,00\s*€/);
+  await expect(page.getByRole("img", { name: "QR platba", exact: true })).toHaveCount(0);
+  const response = await page.request.get(`/invoices/${invoice.id}/pdf`);
+  expect(response.status()).toBe(200);
+  const file = info.outputPath("eur.pdf");
+  fs.writeFileSync(file, await response.body());
+  const text = execFileSync("pdftotext", ["-layout", file, "-"], { encoding: "utf8" });
+  expect(text).toMatch(/123,00\s*€/);
+  expect(text).not.toContain("SPD*");
+  expect(text).toContain("pouze pro CZK");
 });

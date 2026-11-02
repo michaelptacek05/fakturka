@@ -199,18 +199,18 @@ function getTotalsRows(invoice: PdfInvoice, isVatPayer: boolean) {
   const rows = [
     ...(isVatPayer
       ? [
-          ["Mezisoučet", formatCurrency(invoice.subtotal)],
-          ["DPH", formatCurrency(invoice.vatTotal)],
+          ["Mezisoučet", formatCurrency(invoice.subtotal, invoice.currency)],
+          ["DPH", formatCurrency(invoice.vatTotal, invoice.currency)],
         ]
       : []),
-    ["Celkem k úhradě", formatCurrency(invoice.total)],
+    ["Celkem k úhradě", formatCurrency(invoice.total, invoice.currency)],
   ];
 
   // U částečné úhrady musí být na dokladu vidět doplatek, ne jen celková částka.
   if (summary.isPartiallyPaid) {
     rows.push(
-      ["Uhrazeno", formatCurrency(fromCents(summary.paidCents))],
-      ["Zbývá k úhradě", formatCurrency(fromCents(summary.remainingCents))],
+      ["Uhrazeno", formatCurrency(fromCents(summary.paidCents), invoice.currency)],
+      ["Zbývá k úhradě", formatCurrency(fromCents(summary.remainingCents), invoice.currency)],
     );
   }
 
@@ -534,7 +534,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
   const summary = getPaymentSummary(invoice);
   // Na uhrazené faktuře QR chybí schválně — sveden odběratel by zaplatil znovu.
   const spaydPayload =
-    summary.remainingCents > 0
+    invoice.currency === "CZK" && summary.remainingCents > 0
       ? sanitizeSpaydPayload(
           buildSpaydPayload({
             accountNumber: invoice.profile.accountNumber,
@@ -683,7 +683,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       rowY,
       { align: "right", width: columns.quantity.width },
     );
-    document.text(formatCurrency(item.unitPrice), columns.unitPrice.x, rowY, {
+    document.text(formatCurrency(item.unitPrice, invoice.currency), columns.unitPrice.x, rowY, {
       align: "right",
       width: columns.unitPrice.width,
     });
@@ -695,7 +695,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       });
     }
 
-    document.font(fonts.bold).text(formatCurrency(item.lineTotal), columns.total.x, rowY, {
+    document.font(fonts.bold).text(formatCurrency(item.lineTotal, invoice.currency), columns.total.x, rowY, {
       align: "right",
       width: columns.total.width,
     });
@@ -763,7 +763,7 @@ export async function renderInvoicePdf(invoice: PdfInvoice) {
       .font(fonts.regular)
       .fontSize(10)
       .fillColor("#18181b")
-      .text(PAID_WITHOUT_QR_TEXT, CONTENT_LEFT, footerTop + layout.qrTop, {
+      .text(invoice.currency !== "CZK" ? "QR platba je dostupná pouze pro CZK." : PAID_WITHOUT_QR_TEXT, CONTENT_LEFT, footerTop + layout.qrTop, {
         width: FOOTER_LEFT_WIDTH,
       });
   }

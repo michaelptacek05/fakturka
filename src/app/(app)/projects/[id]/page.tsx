@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ListTodo } from "lucide-react";
@@ -74,6 +75,7 @@ export default async function ProjectDetailPage({
   params,
   searchParams,
 }: ProjectDetailPageProps) {
+  await requireSession();
   const { id } = await params;
   const [project, clients] = await Promise.all([getProject(id), getClients()]);
   const query = await searchParams;

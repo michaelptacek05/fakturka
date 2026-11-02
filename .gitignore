@@ -30,6 +30,7 @@
 .idea/
 CLAUDE.md
 .claude/
+/docs
 
 # debug
 npm-debug.log*

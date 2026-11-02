@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { getValidationMessage } from "@/lib/validation";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Import dat — Fakturka",
@@ -40,8 +42,24 @@ function getErrorMessage(error: string | undefined) {
 }
 
 export default async function ImportPage({ searchParams }: ImportPageProps) {
+  await requireSession();
   const params = await searchParams;
   const errorMessage = getErrorMessage(params.error);
+  let existingInvoiceNumbers: string[] | null = null;
+  try {
+    const profile = await prisma.userProfile.findFirst({
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    existingInvoiceNumbers = profile
+      ? (await prisma.invoice.findMany({
+          select: { number: true },
+          where: { profileId: profile.id },
+        })).map((invoice) => invoice.number)
+      : [];
+  } catch {
+    // Bez znalosti existujících čísel nelze správně vyhodnotit limity náhledu.
+  }
 
   const clientsCreated = Number.parseInt(params.clientsCreated ?? "", 10);
   const clientsUpdated = Number.parseInt(params.clientsUpdated ?? "", 10);
@@ -129,7 +147,14 @@ export default async function ImportPage({ searchParams }: ImportPageProps) {
         title="Faktury"
         description="Vystavené faktury včetně položek, pokud je export obsahuje."
         expectedColumns="number, client_name, issued_on, due_on, total, status, lines__line__name, lines__line__quantity, lines__line__unit_price, lines__line__vat_rate"
+        existingInvoiceNumbers={existingInvoiceNumbers ?? []}
+        disabled={existingInvoiceNumbers === null}
       />
+      {existingInvoiceNumbers === null ? (
+        <Alert variant="destructive" title="Náhled faktur není dostupný">
+          Nepodařilo se načíst existující čísla faktur. Zkontrolujte připojení k databázi a obnovte stránku.
+        </Alert>
+      ) : null}
     </div>
   );
 }

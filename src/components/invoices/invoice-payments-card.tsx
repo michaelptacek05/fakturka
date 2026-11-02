@@ -29,6 +29,7 @@ type InvoicePaymentRow = {
 };
 
 type InvoicePaymentsCardProps = {
+  currency: string;
   invoiceId: string;
   paidAmount: MoneyLike;
   payments: InvoicePaymentRow[];
@@ -37,6 +38,7 @@ type InvoicePaymentsCardProps = {
 };
 
 export function InvoicePaymentsCard({
+  currency,
   invoiceId,
   paidAmount,
   payments,
@@ -63,12 +65,12 @@ export function InvoicePaymentsCard({
       <CardContent className="space-y-5">
         <dl className="grid divide-y divide-border border-b border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {[
-            { label: "Celkem", value: formatCurrency(total) },
+            { label: "Celkem", value: formatCurrency(total, currency) },
             {
               label: "Uhrazeno",
-              value: formatCurrency(fromCents(summary.paidCents)),
+              value: formatCurrency(fromCents(summary.paidCents), currency),
             },
-            { label: "Zbývá", value: formatCurrency(remaining) },
+            { label: "Zbývá", value: formatCurrency(remaining, currency) },
           ].map((entry) => (
             <div
               className="py-3 sm:px-4 sm:first:pl-0 sm:last:pr-0"
@@ -109,7 +111,7 @@ export function InvoicePaymentsCard({
                       isRefund ? "text-destructive" : ""
                     }`}
                   >
-                    {formatCurrency(payment.amount)}
+                    {formatCurrency(payment.amount, currency)}
                     <span className="ml-2 font-normal text-muted-foreground">
                       {formatDate(payment.paidOn)}
                     </span>
@@ -153,7 +155,7 @@ export function InvoicePaymentsCard({
                 required
                 inputMode="decimal"
                 defaultValue={remaining.toFixed(2)}
-                hint={`Nejvýš ${formatCurrency(remaining)}`}
+                hint={`Nejvýš ${formatCurrency(remaining, currency)}`}
               />
               <InputField
                 label="Datum úhrady"

@@ -1,5 +1,7 @@
 "use server";
 
+import { requireSession } from "@/lib/auth-session";
+
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -37,6 +39,7 @@ import {
   removeStoredInvoiceAsset,
 } from "@/lib/invoice-assets";
 import { prisma } from "@/lib/prisma";
+import { normalizeInvoiceAsset } from "@/lib/invoice-asset-validation";
 import { calculateInvoiceLine, sumInvoiceLines } from "@/lib/invoice-calculations";
 import {
   getOptionalFormString,
@@ -194,6 +197,7 @@ function parseInvoiceFormData(formData: FormData, isVatPayer: boolean) {
 }
 
 export async function upsertProfile(formData: FormData) {
+  await requireSession();
   let data;
   let invoiceNumberFormat = DEFAULT_INVOICE_NUMBER_FORMAT;
 
@@ -310,6 +314,7 @@ export async function upsertProfile(formData: FormData) {
 }
 
 export async function createInvoice(formData: FormData) {
+  await requireSession();
   let profile;
 
   try {
@@ -438,6 +443,7 @@ export async function createInvoice(formData: FormData) {
 }
 
 export async function updateInvoice(invoiceId: string, formData: FormData) {
+  await requireSession();
   let profile;
 
   try {
@@ -580,6 +586,7 @@ async function syncInvoicePaymentState(
 }
 
 export async function addInvoicePayment(invoiceId: string, formData: FormData) {
+  await requireSession();
   let amountCents: number;
   let paidOn: Date;
   let note: string | null;
@@ -655,6 +662,7 @@ export async function addInvoicePayment(invoiceId: string, formData: FormData) {
 }
 
 export async function deleteInvoicePayment(paymentId: string) {
+  await requireSession();
   let payment;
 
   try {
@@ -692,6 +700,7 @@ export async function deleteInvoicePayment(paymentId: string) {
  * „přišlo to celé“ — historie plateb tím zůstane úplná.
  */
 export async function markInvoicePaid(invoiceId: string) {
+  await requireSession();
   try {
     await prisma.$transaction(
       async (tx) => {
@@ -749,6 +758,7 @@ export async function markInvoicePaid(invoiceId: string) {
  * takže se v příjmech odečte přesně tam, kde peníze reálně odešly.
  */
 export async function cancelInvoice(invoiceId: string, formData?: FormData) {
+  await requireSession();
   const shouldRefund = formData?.get("refund") === "1";
 
   let invoice;
@@ -810,6 +820,7 @@ export async function cancelInvoice(invoiceId: string, formData?: FormData) {
 }
 
 export async function deleteInvoices(formData: FormData) {
+  await requireSession();
   const invoiceIds = formData
     .getAll("invoiceId")
     .filter((value): value is string => typeof value === "string" && value.length > 0);
@@ -837,6 +848,7 @@ export async function deleteInvoices(formData: FormData) {
 }
 
 export async function createClient(formData: FormData) {
+  await requireSession();
   let profile;
 
   try {
@@ -881,6 +893,7 @@ export async function createClient(formData: FormData) {
 }
 
 export async function updateClient(clientId: string, formData: FormData) {
+  await requireSession();
   let profile;
 
   try {
@@ -919,6 +932,7 @@ export async function updateClient(clientId: string, formData: FormData) {
 }
 
 export async function deleteClient(clientId: string) {
+  await requireSession();
   try {
     await prisma.client.delete({
       where: { id: clientId },
@@ -932,6 +946,7 @@ export async function deleteClient(clientId: string) {
 }
 
 export async function uploadInvoiceAsset(formData: FormData) {
+  await requireSession();
   const assetType = formData.get("assetType");
   const file = formData.get("assetFile");
 
@@ -951,6 +966,13 @@ export async function uploadInvoiceAsset(formData: FormData) {
     redirect("/settings/profile?assetError=size");
   }
 
+  let normalized;
+  try {
+    normalized = await normalizeInvoiceAsset(Buffer.from(await file.arrayBuffer()), file.type);
+  } catch {
+    redirect("/settings/profile?assetError=type");
+  }
+
   let profile;
 
   try {
@@ -966,7 +988,7 @@ export async function uploadInvoiceAsset(formData: FormData) {
     redirect("/settings/profile?missingProfile=1");
   }
 
-  const extension = getInvoiceAssetExtension(file.type);
+  const extension = getInvoiceAssetExtension(normalized.mimeType);
   const directory = path.join(getInvoiceAssetStorageRoot(), profile.id);
   const fileName = `${assetType.toLowerCase()}-${randomUUID()}.${extension}`;
   const storagePath = path.join("storage", "invoice-assets", profile.id, fileName);
@@ -975,7 +997,7 @@ export async function uploadInvoiceAsset(formData: FormData) {
 
   try {
     await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(absolutePath, Buffer.from(await file.arrayBuffer()));
+    await fs.writeFile(absolutePath, normalized.data);
 
     await prisma.$transaction(async (tx) => {
       const oldAssets = await tx.invoiceAsset.findMany({
@@ -998,7 +1020,7 @@ export async function uploadInvoiceAsset(formData: FormData) {
       await tx.invoiceAsset.create({
         data: {
           fileName: file.name || fileName,
-          mimeType: file.type,
+          mimeType: normalized.mimeType,
           profileId: profile.id,
           storagePath,
           type: assetType,
@@ -1024,6 +1046,7 @@ export async function uploadInvoiceAsset(formData: FormData) {
 }
 
 export async function deleteInvoiceAsset(assetId: string) {
+  await requireSession();
   let storagePath: string | null = null;
 
   try {

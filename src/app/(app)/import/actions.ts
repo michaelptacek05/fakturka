@@ -1,5 +1,7 @@
 "use server";
 
+import { requireSession } from "@/lib/auth-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -17,6 +19,7 @@ import {
   type ImportedInvoice,
 } from "@/lib/fakturoid-import";
 import { prisma } from "@/lib/prisma";
+import { readInvoiceImportNumber, validateInvoiceImport } from "@/lib/import-validation";
 import { calculateInvoiceLine, moneyToCents, sumInvoiceLines } from "@/lib/invoice-calculations";
 import { getValidationErrorParam, normalizeQuantity, ValidationError } from "@/lib/validation";
 
@@ -73,6 +76,7 @@ async function getProfileId() {
 }
 
 export async function importClients(formData: FormData) {
+  await requireSession();
   const records = readPayload<ImportedClient>(formData);
 
   if (records.length === 0) {
@@ -206,7 +210,14 @@ async function syncSequenceAfterImport(profileId: string) {
 }
 
 export async function importInvoices(formData: FormData) {
+  await requireSession();
   const records = readPayload<ImportedInvoice>(formData);
+  let numbers: string[];
+  try {
+    numbers = records.map(readInvoiceImportNumber);
+  } catch (error) {
+    redirect(`/import?error=${getValidationErrorParam(error)}`);
+  }
 
   if (records.length === 0) {
     redirect("/import?error=empty");
@@ -230,9 +241,35 @@ export async function importInvoices(formData: FormData) {
   const profileId = profile.id;
   let created = 0;
   let skipped = 0;
+  let newRecords: ImportedInvoice[];
 
   try {
-    for (const record of records) {
+    const existing = await prisma.invoice.findMany({
+      select: { number: true },
+      where: { profileId, number: { in: numbers } },
+    });
+    const seen = new Set(existing.map((invoice) => invoice.number));
+    newRecords = records.filter((_record, index) => {
+      if (seen.has(numbers[index])) {
+        skipped += 1;
+        return false;
+      }
+      seen.add(numbers[index]);
+      return true;
+    });
+  } catch {
+    redirect("/import?error=db");
+  }
+
+  // Přísnější pravidla platí pro nové zápisy, nikoli pro již uloženou historii.
+  try {
+    validateInvoiceImport(newRecords);
+  } catch (error) {
+    redirect(`/import?error=${getValidationErrorParam(error)}`);
+  }
+
+  try {
+    for (const record of newRecords) {
       const number = sanitizeText(record.number);
       const issueDate = toDateOrNull(record.issueDate);
       const items = Array.isArray(record.items) ? record.items : [];
@@ -347,7 +384,7 @@ export async function importInvoices(formData: FormData) {
           clientName,
           clientPostalCode: clientData.postalCode,
           clientStreet: clientData.street,
-          currency: sanitizeText(record.currency, "CZK").slice(0, 3),
+          currency: sanitizeText(record.currency, "CZK").toUpperCase(),
           dueDate: toDateOrNull(record.dueDate) ?? issueDate,
           issueDate,
           items: {

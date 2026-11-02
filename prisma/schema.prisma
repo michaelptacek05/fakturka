@@ -7,6 +7,21 @@ datasource db {
   provider = "postgresql"
 }
 
+model AuthSession {
+  tokenHash String   @id
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model LoginThrottle {
+  sourceHash      String   @id
+  attempts        Int
+  windowStartedAt DateTime
+
+  @@index([windowStartedAt])
+}
+
 enum VatPayerStatus {
   NON_PAYER
   PAYER

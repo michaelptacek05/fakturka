@@ -21,6 +21,8 @@ const env = {
   DATABASE_URL: testUrl.toString(),
   AUTH_PASSWORD: "e2e-only-password",
   AUTH_SECRET: "e2e-only-secret",
+  AUTH_TRUST_PROXY: "false",
+  AUTH_REQUIRED: "true",
   TZ: "UTC",
   NEXT_TELEMETRY_DISABLED: "1",
 };

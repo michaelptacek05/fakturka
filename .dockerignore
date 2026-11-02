@@ -10,3 +10,12 @@ docker-compose.yml
 !.env.example
 coverage
 README.md
+storage
+test-results
+playwright-report
+.codex-artifacts
+docs
+backups
+*.dump
+*.sql.gz
+*.tar.gz

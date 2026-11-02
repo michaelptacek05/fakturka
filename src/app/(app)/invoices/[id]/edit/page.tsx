@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -53,6 +54,7 @@ export default async function InvoiceEditPage({
   params,
   searchParams,
 }: InvoiceEditPageProps) {
+  await requireSession();
   const { id } = await params;
   const invoice = await getInvoice(id);
   const query = await searchParams;

@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { Download, Search, UserPlus } from "lucide-react";
 
@@ -56,6 +57,7 @@ export default async function ClientsPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const query = typeof params?.q === "string" ? params.q.trim() : "";
   const profile = await getProfile();

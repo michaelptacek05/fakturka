@@ -46,13 +46,15 @@ type CsvImportCardProps = {
   expectedColumns: string;
   kind: "clients" | "invoices";
   title: string;
+  existingInvoiceNumbers?: string[];
+  disabled?: boolean;
 };
 
-function SubmitButton({ count }: { count: number }) {
+function SubmitButton({ count, disabled }: { count: number; disabled: boolean }) {
   const { pending } = useFormStatus();
 
   return (
-    <Button type="submit" disabled={pending || count === 0}>
+    <Button type="submit" disabled={pending || count === 0 || disabled}>
       {pending ? (
         <Loader2 className="size-4 animate-spin" aria-hidden="true" />
       ) : (
@@ -77,6 +79,8 @@ export function CsvImportCard({
   expectedColumns,
   kind,
   title,
+  existingInvoiceNumbers = [],
+  disabled = false,
 }: CsvImportCardProps) {
   const inputId = useId();
   const [fileName, setFileName] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function CsvImportCard({
       setPreview(
         kind === "clients"
           ? previewClientImport(text)
-          : previewInvoiceImport(text),
+          : previewInvoiceImport(text, existingInvoiceNumbers),
       );
     } catch {
       setReadError("Soubor se nepodařilo přečíst. Zkontrolujte, že jde o CSV.");
@@ -126,6 +130,7 @@ export function CsvImportCard({
             type="file"
             accept=".csv,text/csv,text/plain"
             onChange={handleFileChange}
+            disabled={disabled}
             className="h-auto py-2"
           />
           <p className="text-xs text-muted-foreground">
@@ -177,6 +182,10 @@ export function CsvImportCard({
                   ) : null}
                 </ul>
               </Alert>
+            ) : null}
+
+            {preview.blockingError ? (
+              <Alert variant="destructive" title={preview.blockingError} />
             ) : null}
 
             {recordCount > 0 ? (
@@ -269,7 +278,7 @@ export function CsvImportCard({
                 name="payload"
                 value={JSON.stringify(preview.records)}
               />
-              <SubmitButton count={recordCount} />
+              <SubmitButton count={recordCount} disabled={disabled || Boolean(preview.blockingError)} />
               <span className="text-xs text-muted-foreground">
                 {kind === "invoices"
                   ? "Faktury s již existujícím číslem se přeskočí."

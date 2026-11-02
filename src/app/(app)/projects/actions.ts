@@ -1,10 +1,13 @@
 "use server";
 
+import { requireSession } from "@/lib/auth-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { Priority, ProjectStatus, TaskStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import { sanitizeRedirectPath } from "@/lib/auth";
 import {
   isPriority,
   isProjectStatus,
@@ -52,6 +55,7 @@ function readProjectForm(formData: FormData) {
 }
 
 export async function createProject(formData: FormData) {
+  await requireSession();
   let profileId: string | null;
 
   try {
@@ -91,6 +95,7 @@ export async function createProject(formData: FormData) {
 }
 
 export async function updateProject(projectId: string, formData: FormData) {
+  await requireSession();
   let data;
 
   try {
@@ -115,6 +120,7 @@ export async function updateProject(projectId: string, formData: FormData) {
 }
 
 export async function deleteProject(projectId: string) {
+  await requireSession();
   try {
     // Úkoly i jejich poznámky mizí s projektem díky kaskádě ve schématu.
     await prisma.project.delete({ where: { id: projectId } });
@@ -155,8 +161,9 @@ async function getNextPosition(status: TaskStatus) {
 }
 
 export async function createTask(formData: FormData) {
+  await requireSession();
   const projectId = getOptionalFormString(formData, "projectId");
-  const returnTo = getOptionalFormString(formData, "returnTo") ?? "/tasks";
+  const returnTo = sanitizeRedirectPath(getOptionalFormString(formData, "returnTo") ?? "/tasks");
 
   if (!projectId) {
     redirect(`${returnTo}?error=project`);
@@ -190,6 +197,7 @@ export async function createTask(formData: FormData) {
 }
 
 export async function updateTask(taskId: string, formData: FormData) {
+  await requireSession();
   let data;
 
   try {
@@ -230,6 +238,7 @@ export async function updateTask(taskId: string, formData: FormData) {
 }
 
 export async function deleteTask(taskId: string) {
+  await requireSession();
   let projectId: string | null = null;
 
   try {
@@ -264,6 +273,7 @@ export async function moveTask(
   status: TaskStatus,
   beforeTaskId: string | null,
 ) {
+  await requireSession();
   if (!isTaskStatus(status)) {
     return { ok: false as const };
   }
@@ -347,6 +357,7 @@ export async function moveTask(
 }
 
 export async function addTaskNote(taskId: string, formData: FormData) {
+  await requireSession();
   const body = getOptionalFormString(formData, "body");
 
   if (!body) {
@@ -366,6 +377,7 @@ export async function addTaskNote(taskId: string, formData: FormData) {
 }
 
 export async function deleteTaskNote(noteId: string, taskId: string) {
+  await requireSession();
   try {
     await prisma.taskNote.delete({ where: { id: noteId } });
   } catch {
