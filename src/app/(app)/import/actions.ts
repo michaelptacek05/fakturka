@@ -1,5 +1,7 @@
 "use server";
 
+import { requireSession } from "@/lib/auth-session";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -17,6 +19,9 @@ import {
   type ImportedInvoice,
 } from "@/lib/fakturoid-import";
 import { prisma } from "@/lib/prisma";
+import { readInvoiceImportNumber, validateInvoiceImport } from "@/lib/import-validation";
+import { calculateInvoiceLine, moneyToCents, sumInvoiceLines } from "@/lib/invoice-calculations";
+import { getValidationErrorParam, normalizeQuantity, ValidationError } from "@/lib/validation";
 
 /** Payload chodí z prohlížeče, takže se na serveru kontroluje znovu od nuly. */
 function readPayload<TRecord>(formData: FormData): TRecord[] {
@@ -46,7 +51,7 @@ function toDateOrNull(value: string | null | undefined) {
 }
 
 function toCents(value: number) {
-  return Math.round(value * 100);
+  return moneyToCents(value);
 }
 
 function sanitizeText(value: unknown, fallback = "") {
@@ -71,6 +76,7 @@ async function getProfileId() {
 }
 
 export async function importClients(formData: FormData) {
+  await requireSession();
   const records = readPayload<ImportedClient>(formData);
 
   if (records.length === 0) {
@@ -204,7 +210,14 @@ async function syncSequenceAfterImport(profileId: string) {
 }
 
 export async function importInvoices(formData: FormData) {
+  await requireSession();
   const records = readPayload<ImportedInvoice>(formData);
+  let numbers: string[];
+  try {
+    numbers = records.map(readInvoiceImportNumber);
+  } catch (error) {
+    redirect(`/import?error=${getValidationErrorParam(error)}`);
+  }
 
   if (records.length === 0) {
     redirect("/import?error=empty");
@@ -228,9 +241,35 @@ export async function importInvoices(formData: FormData) {
   const profileId = profile.id;
   let created = 0;
   let skipped = 0;
+  let newRecords: ImportedInvoice[];
 
   try {
-    for (const record of records) {
+    const existing = await prisma.invoice.findMany({
+      select: { number: true },
+      where: { profileId, number: { in: numbers } },
+    });
+    const seen = new Set(existing.map((invoice) => invoice.number));
+    newRecords = records.filter((_record, index) => {
+      if (seen.has(numbers[index])) {
+        skipped += 1;
+        return false;
+      }
+      seen.add(numbers[index]);
+      return true;
+    });
+  } catch {
+    redirect("/import?error=db");
+  }
+
+  // Přísnější pravidla platí pro nové zápisy, nikoli pro již uloženou historii.
+  try {
+    validateInvoiceImport(newRecords);
+  } catch (error) {
+    redirect(`/import?error=${getValidationErrorParam(error)}`);
+  }
+
+  try {
+    for (const record of newRecords) {
       const number = sanitizeText(record.number);
       const issueDate = toDateOrNull(record.issueDate);
       const items = Array.isArray(record.items) ? record.items : [];
@@ -281,9 +320,11 @@ export async function importInvoices(formData: FormData) {
 
       const normalizedItems = items.map((item, index) => {
         const quantity =
-          typeof item.quantity === "number" && item.quantity > 0
-            ? item.quantity
-            : 1;
+          normalizeQuantity(
+            typeof item.quantity === "number" || typeof item.quantity === "string"
+              ? String(item.quantity)
+              : "1",
+          );
         const unitPriceCents = toCents(
           typeof item.unitPrice === "number" ? item.unitPrice : 0,
         );
@@ -291,12 +332,13 @@ export async function importInvoices(formData: FormData) {
           typeof item.vatRate === "number" && item.vatRate >= 0 && item.vatRate <= 100
             ? item.vatRate
             : 0;
-        const lineSubtotalCents = Math.round(quantity * unitPriceCents);
-        const lineVatCents = Math.round(lineSubtotalCents * (vatRate / 100));
+        const { lineSubtotalCents, lineVatCents, lineTotalCents } = calculateInvoiceLine({
+          quantity, unitPriceCents, vatRate,
+        });
 
         return {
           lineSubtotalCents,
-          lineTotalCents: lineSubtotalCents + lineVatCents,
+          lineTotalCents,
           lineVatCents,
           name: sanitizeText(item.name, "Fakturovaná položka"),
           position: index + 1,
@@ -307,14 +349,7 @@ export async function importInvoices(formData: FormData) {
         };
       });
 
-      const subtotalCents = normalizedItems.reduce(
-        (sum, item) => sum + item.lineSubtotalCents,
-        0,
-      );
-      const vatTotalCents = normalizedItems.reduce(
-        (sum, item) => sum + item.lineVatCents,
-        0,
-      );
+      const { subtotalCents, vatTotalCents, totalCents } = sumInvoiceLines(normalizedItems);
 
       const paidAt = toDateOrNull(record.paidAt);
       const status =
@@ -323,7 +358,6 @@ export async function importInvoices(formData: FormData) {
           : record.status === "PAID"
             ? InvoiceStatus.PAID
             : InvoiceStatus.ISSUED;
-      const totalCents = subtotalCents + vatTotalCents;
       // Přeplatek ze zdroje osekáváme, jinak by nesedělo `paidAmount` s celkem.
       const reportedPaidCents =
         typeof record.paidAmount === "number" && record.paidAmount > 0
@@ -350,7 +384,7 @@ export async function importInvoices(formData: FormData) {
           clientName,
           clientPostalCode: clientData.postalCode,
           clientStreet: clientData.street,
-          currency: sanitizeText(record.currency, "CZK").slice(0, 3),
+          currency: sanitizeText(record.currency, "CZK").toUpperCase(),
           dueDate: toDateOrNull(record.dueDate) ?? issueDate,
           issueDate,
           items: {
@@ -360,7 +394,7 @@ export async function importInvoices(formData: FormData) {
               lineVat: decimalFromCents(item.lineVatCents),
               name: item.name,
               position: item.position,
-              quantity: item.quantity.toFixed(3),
+              quantity: item.quantity,
               unit: item.unit,
               unitPrice: decimalFromCents(item.unitPriceCents),
               vatRate: item.vatRate.toFixed(2),
@@ -402,8 +436,8 @@ export async function importInvoices(formData: FormData) {
     }
 
     await syncSequenceAfterImport(profileId);
-  } catch {
-    redirect("/import?error=db");
+  } catch (error) {
+    redirect(`/import?error=${error instanceof ValidationError ? getValidationErrorParam(error) : "db"}`);
   }
 
   revalidatePath("/");

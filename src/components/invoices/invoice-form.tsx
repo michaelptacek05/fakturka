@@ -1,5 +1,7 @@
 "use client";
 
+import { calculateInvoiceLine, moneyToCents, sumInvoiceLines } from "@/lib/invoice-calculations";
+
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -155,13 +157,21 @@ function createEmptyRow(): InvoiceRow {
   };
 }
 
-function getRowTotal(row: InvoiceRow, isVatPayer: boolean) {
-  const subtotal =
-    Math.round(parseNumber(row.quantity) * parseNumber(row.unitPrice) * 100) /
-    100;
-  const vatRate = isVatPayer ? parseNumber(row.vatRate) : 0;
+function getRowAmounts(row: InvoiceRow, isVatPayer: boolean) {
+  try {
+    return calculateInvoiceLine({
+      quantity: row.quantity.replace(/\s/g, "").replace(",", ".") || "0",
+      unitPriceCents: moneyToCents(parseNumber(row.unitPrice)),
+      vatRate: isVatPayer ? parseNumber(row.vatRate) : 0,
+    });
+  } catch {
+    // Rozepsané číslo není chyba formuláře; definitivně jej ověří server.
+    return { lineSubtotalCents: 0, lineVatCents: 0, lineTotalCents: 0 };
+  }
+}
 
-  return subtotal + Math.round(subtotal * (vatRate / 100) * 100) / 100;
+function getRowTotal(row: InvoiceRow, isVatPayer: boolean) {
+  return getRowAmounts(row, isVatPayer).lineTotalCents / 100;
 }
 
 export function InvoiceForm({
@@ -214,23 +224,10 @@ export function InvoiceForm({
   const isEditable = !readOnly;
 
   const totals = useMemo(
-    () =>
-      rows.reduce(
-        (sum, row) => {
-          const quantity = parseNumber(row.quantity);
-          const unitPrice = parseNumber(row.unitPrice);
-          const vatRate = isVatPayer ? parseNumber(row.vatRate) : 0;
-          const subtotal = Math.round(quantity * unitPrice * 100) / 100;
-          const vat = Math.round(subtotal * (vatRate / 100) * 100) / 100;
-
-          return {
-            subtotal: sum.subtotal + subtotal,
-            total: sum.total + subtotal + vat,
-            vat: sum.vat + vat,
-          };
-        },
-        { subtotal: 0, total: 0, vat: 0 },
-      ),
+    () => {
+      const sum = sumInvoiceLines(rows.map((row) => getRowAmounts(row, isVatPayer)));
+      return { subtotal: sum.subtotalCents / 100, total: sum.totalCents / 100, vat: sum.vatTotalCents / 100 };
+    },
     [isVatPayer, rows],
   );
 
@@ -490,6 +487,7 @@ export function InvoiceForm({
                   <Field
                     label="Množství"
                     htmlFor={`${fieldPrefix}-quantity-${index}`}
+                    hint="Až 9 desetinných míst."
                     required
                   >
                     <Input

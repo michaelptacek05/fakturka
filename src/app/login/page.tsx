@@ -24,7 +24,9 @@ function getErrorMessage(error: string | undefined) {
     case "invalid":
       return "Nesprávné heslo.";
     case "locked":
-      return "Příliš mnoho neúspěšných pokusů. Zkuste to znovu za pět minut.";
+      return "Příliš mnoho pokusů o přihlášení. Zkuste to znovu za pět minut.";
+    case "unavailable":
+      return "Přihlášení teď není dostupné. Zkuste to prosím za chvíli.";
     default:
       return null;
   }

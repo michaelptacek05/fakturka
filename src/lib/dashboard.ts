@@ -22,6 +22,7 @@ const DEFAULT_TAX_SETTINGS: TaxSettings = {
 const VAT_LIMIT_CZK = 2_000_000;
 
 type DashboardInvoice = {
+  currency: string;
   /** Snapshot odběratele z faktury, ne aktuální stav adresáře. */
   clientName: string;
   dueDate: Date;
@@ -118,6 +119,7 @@ export function buildDashboardData(
   today = new Date(),
   taxSettings: TaxSettings = DEFAULT_TAX_SETTINGS,
 ) {
+  invoices = invoices.filter((invoice) => invoice.currency === "CZK");
   const todayStart = startOfDay(today);
   const monthStart = startOfMonth(today);
   const nextMonthStart = addMonths(monthStart, 1);

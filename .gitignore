@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results
+/playwright-report
 
 # next.js
 /.next/
@@ -28,6 +30,7 @@
 .idea/
 CLAUDE.md
 .claude/
+/docs
 
 # debug
 npm-debug.log*

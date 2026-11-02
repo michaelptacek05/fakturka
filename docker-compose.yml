@@ -50,10 +50,15 @@ services:
       migrate:
         condition: service_completed_successfully
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fakturka}?schema=public
+      # Volitelně samostatný runtime účet; migrátor dál používá původní účet.
+      DATABASE_URL: ${APP_DATABASE_URL:-postgresql://${POSTGRES_USER:-fakturka}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fakturka}?schema=public}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       AUTH_PASSWORD: ${AUTH_PASSWORD:?AUTH_PASSWORD musi byt nastaveno}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET musi byt nastaveno}
+      AUTH_REQUIRED: "true"
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-720}
+      # NPM přepisuje X-Real-IP; přímý přístup zůstává jen na loopbacku.
+      AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-false}
     # Publikovaný port slouží k ladění z hostitele. Nginx proxy manager
     # se k aplikaci připojuje po síti nginx-proxy-manager_default na host "app", port 3000.
     # Pro přímé vystavení na veřejné rozhraní nastavte APP_BIND=0.0.0.0.

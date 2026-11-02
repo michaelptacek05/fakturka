@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, FolderPlus } from "lucide-react";
@@ -49,6 +50,7 @@ export default async function ClientDetailPage({
   params,
   searchParams,
 }: ClientDetailPageProps) {
+  await requireSession();
   const { id } = await params;
   const client = await getClient(id);
   const query = await searchParams;

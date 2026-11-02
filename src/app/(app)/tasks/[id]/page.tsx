@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, MessageSquarePlus, Save, Trash2 } from "lucide-react";
@@ -87,6 +88,7 @@ export default async function TaskDetailPage({
   params,
   searchParams,
 }: TaskDetailPageProps) {
+  await requireSession();
   const { id } = await params;
   const task = await getTask(id);
   const query = await searchParams;

@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import { notFound } from "next/navigation";
 import { NextResponse } from "next/server";
 
@@ -14,6 +15,7 @@ type InvoicePdfRouteProps = {
 };
 
 export async function GET(_request: Request, { params }: InvoicePdfRouteProps) {
+  await requireSession();
   const { id } = await params;
   const invoice = await prisma.invoice.findUnique({
     include: {
@@ -37,7 +39,7 @@ export async function GET(_request: Request, { params }: InvoicePdfRouteProps) {
   }
 
   const pdf = await renderInvoicePdf(invoice);
-  const filename = `faktura-${invoice.number}.pdf`;
+  const filename = `faktura-${invoice.number.replace(/[^A-Za-z0-9._-]/g, "_")}.pdf`;
   const body = new ArrayBuffer(pdf.byteLength);
   new Uint8Array(body).set(pdf);
 

@@ -9,8 +9,12 @@ export const numberFormatter = new Intl.NumberFormat("cs-CZ", {
   maximumFractionDigits: 3,
 });
 
-export function formatCurrency(value: number | string | { toString(): string }) {
-  return currencyFormatter.format(Number(value.toString()));
+export function formatCurrency(value: number | string | { toString(): string }, currency = "CZK") {
+  if (currency === "CZK") return currencyFormatter.format(Number(value.toString()));
+  if (!/^[A-Z]{3}$/.test(currency)) return `${numberFormatter.format(Number(value.toString()))} ${currency}`;
+  return new Intl.NumberFormat("cs-CZ", {
+    currency, style: "currency", minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(Number(value.toString()));
 }
 
 export function formatDate(date: Date | string) {

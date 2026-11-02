@@ -1,7 +1,9 @@
+import { requireSession } from "@/lib/auth-session";
 import { NextResponse } from "next/server";
 
 import { InvoiceStatus } from "@/generated/prisma/enums";
 import { formatDate } from "@/lib/format";
+import { toSpreadsheetCsvCell } from "@/lib/csv";
 import {
   fromCents,
   getInvoiceVisualState,
@@ -36,12 +38,6 @@ const visualStateLabels: Record<InvoiceVisualState, string> = {
   unpaid: statusLabels[InvoiceStatus.ISSUED],
 };
 
-function csvCell(value: string | number | null | undefined) {
-  const text = value === null || value === undefined ? "" : String(value);
-
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
 function getInvoiceIds(request: Request) {
   const url = new URL(request.url);
   const ids = url.searchParams
@@ -54,6 +50,7 @@ function getInvoiceIds(request: Request) {
 }
 
 export async function GET(request: Request) {
+  await requireSession();
   const invoiceIds = getInvoiceIds(request);
 
   if (invoiceIds.length === 0) {
@@ -122,7 +119,9 @@ export async function GET(request: Request) {
       ];
     }),
   ];
-  const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
+  const csv = rows.map((row, rowIndex) => row.map((cell, index) =>
+    toSpreadsheetCsvCell(cell, rowIndex > 0 && index >= 8 && index <= 12),
+  ).join(";")).join("\n");
   const body = `\uFEFF${csv}\n`;
   const timestamp = new Date().toISOString().slice(0, 10);
 

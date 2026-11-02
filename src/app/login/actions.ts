@@ -1,26 +1,17 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
-  createSessionToken,
   getSessionMaxAgeSeconds,
   isAuthEnabled,
   sanitizeRedirectPath,
   SESSION_COOKIE,
   verifyPassword,
 } from "@/lib/auth";
-
-/**
- * Jednoduché omezení pokusů v paměti procesu. Pro single-user self-host
- * to stačí; při restartu aplikace se počítadlo vynuluje.
- */
-const MAX_ATTEMPTS = 8;
-const LOCKOUT_MS = 5 * 60 * 1000;
-
-let failedAttempts = 0;
-let lockedUntil = 0;
+import { createSession, revokeSession } from "@/lib/auth-session";
+import { getLoginSource, reserveLoginAttempt } from "@/lib/login-throttle";
 
 export async function signIn(formData: FormData) {
   const nextPath = sanitizeRedirectPath(
@@ -33,33 +24,33 @@ export async function signIn(formData: FormData) {
     redirect(nextPath);
   }
 
-  if (Date.now() < lockedUntil) {
-    redirect(`/login?error=locked&next=${encodeURIComponent(nextPath)}`);
+  const requestHeaders = await headers();
+  const source = getLoginSource(requestHeaders.get("x-real-ip"));
+  let allowed = false;
+  try {
+    allowed = source !== null && await reserveLoginAttempt(source);
+  } catch {
+    redirect("/login?error=unavailable");
   }
+  if (!allowed) redirect(`/login?error=locked&next=${encodeURIComponent(nextPath)}`);
 
   const password = formData.get("password");
   const isValid =
-    typeof password === "string" && (await verifyPassword(password));
+    typeof password === "string" && password.length <= 1024 && (await verifyPassword(password));
 
   if (!isValid) {
-    failedAttempts += 1;
-
-    if (failedAttempts >= MAX_ATTEMPTS) {
-      failedAttempts = 0;
-      lockedUntil = Date.now() + LOCKOUT_MS;
-
-      redirect(`/login?error=locked&next=${encodeURIComponent(nextPath)}`);
-    }
-
     redirect(`/login?error=invalid&next=${encodeURIComponent(nextPath)}`);
   }
 
-  failedAttempts = 0;
-  lockedUntil = 0;
-
+  let token: string;
+  try {
+    token = await createSession();
+  } catch {
+    redirect("/login?error=unavailable");
+  }
   const cookieStore = await cookies();
 
-  cookieStore.set(SESSION_COOKIE, await createSessionToken(), {
+  cookieStore.set(SESSION_COOKIE, token, {
     httpOnly: true,
     maxAge: getSessionMaxAgeSeconds(),
     path: "/",
@@ -73,6 +64,7 @@ export async function signIn(formData: FormData) {
 export async function signOut() {
   const cookieStore = await cookies();
 
+  await revokeSession(cookieStore.get(SESSION_COOKIE)?.value);
   cookieStore.delete(SESSION_COOKIE);
 
   redirect("/login");

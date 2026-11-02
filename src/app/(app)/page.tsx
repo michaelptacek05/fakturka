@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { ArrowRight, FilePlus2, Users } from "lucide-react";
 
@@ -65,6 +66,7 @@ async function getDashboardInvoices() {
     return await prisma.invoice.findMany({
       orderBy: { createdAt: "desc" },
       select: {
+        currency: true,
         clientName: true,
         dueDate: true,
         id: true,
@@ -103,6 +105,7 @@ async function getTaxSettings(): Promise<TaxSettings | undefined> {
 }
 
 export default async function Home() {
+  await requireSession();
   const [invoices, taxSettings] = await Promise.all([
     getDashboardInvoices(),
     getTaxSettings(),

@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import Image from "next/image";
 import { FilePlus2, Save, Trash2, Upload } from "lucide-react";
@@ -93,6 +94,7 @@ export default async function ProfilePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const profile = await getProfile();
   const errorMessage = getErrorMessage(params?.error);

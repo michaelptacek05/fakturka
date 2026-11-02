@@ -1,14 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isAuthEnabled, SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { isAuthEnabled, SESSION_COOKIE } from "@/lib/auth";
+import { isSessionAuthenticated } from "@/lib/auth-session";
 
 /** Cesty dostupné i bez přihlášení. */
 const PUBLIC_PATHS = ["/login", "/api/health"];
 
 function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
+  return PUBLIC_PATHS.includes(pathname);
 }
 
 export async function proxy(request: NextRequest) {
@@ -17,9 +16,12 @@ export async function proxy(request: NextRequest) {
   }
 
   const { pathname, search } = request.nextUrl;
-  const isSignedIn = await verifySessionToken(
-    request.cookies.get(SESSION_COOKIE)?.value,
-  );
+  let isSignedIn: boolean;
+  try {
+    isSignedIn = await isSessionAuthenticated(request.cookies.get(SESSION_COOKIE)?.value);
+  } catch {
+    return NextResponse.json({ error: "Přihlášení teď není dostupné." }, { status: 503 });
+  }
 
   if (isPublicPath(pathname)) {
     if (pathname === "/login" && isSignedIn) {

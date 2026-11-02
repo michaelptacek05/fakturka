@@ -1,3 +1,5 @@
+import { moneyToCents, normalizeItemQuantity } from "@/lib/invoice-calculations";
+import { MAX_IMPORT_ITEMS, MAX_IMPORT_ITEMS_PER_INVOICE } from "@/lib/import-limits";
 import {
   isValidCzechAccountNumber,
   isValidIban,
@@ -14,6 +16,7 @@ export type ValidationCode =
   | "format"
   | "iban"
   | "ico"
+  | "importLimit"
   | "item"
   | "payment"
   | "quantity"
@@ -60,10 +63,12 @@ export function getValidationMessage(error?: string | string[]) {
       return "IČO nemá platný český formát.";
     case "item":
       return "Faktura musí mít alespoň jednu položku s názvem.";
+    case "importLimit":
+      return `Import překračuje limit ${MAX_IMPORT_ITEMS_PER_INVOICE} položek na fakturu nebo ${MAX_IMPORT_ITEMS} položek celkem. Rozdělte soubor na menší části.`;
     case "payment":
       return "Úhrada musí být kladná částka a nesmí překročit zbývající částku faktury.";
     case "quantity":
-      return "Množství položky musí být větší než nula.";
+      return "Množství musí být kladné, menší než 1 000 000 000 a mít nejvýše 9 desetinných míst.";
     case "db":
       return "Databáze není dostupná. Zkuste to prosím znovu.";
     case "notfound":
@@ -211,13 +216,13 @@ export function normalizeMoneyToCents(value: FormDataEntryValue | null) {
   }
 
   const normalized = value.replace(/\s/g, "").replace(",", ".");
-  const parsed = Number.parseFloat(normalized);
+  const parsed = /^\+?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(normalized) ? Number(normalized) : NaN;
 
-  if (!Number.isFinite(parsed) || parsed < 0) {
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 9_999_999_999.99) {
     throw new ValidationError("amount", "Částka musí být nezáporné číslo.");
   }
 
-  return Math.round(parsed * 100);
+  return moneyToCents(parsed);
 }
 
 export function normalizeQuantity(value: FormDataEntryValue | null) {
@@ -225,13 +230,11 @@ export function normalizeQuantity(value: FormDataEntryValue | null) {
     throw new ValidationError("quantity", "Množství je povinné.");
   }
 
-  const parsed = Number.parseFloat(value.replace(/\s/g, "").replace(",", "."));
-
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new ValidationError("quantity", "Množství musí být větší než nula.");
+  try {
+    return normalizeItemQuantity(value.replace(/\s/g, "").replace(",", "."));
+  } catch {
+    throw new ValidationError("quantity", "Množství je mimo podporovaný rozsah nebo přesnost.");
   }
-
-  return parsed;
 }
 
 export function normalizeVatRate(value: FormDataEntryValue | null) {

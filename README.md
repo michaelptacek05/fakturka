@@ -21,6 +21,7 @@ Tento projekt je vibe coded. Vzniká iterativně s pomocí AI asistenta, s důra
 - Poznámky u úkolů s datem a časem.
 - Hromadný výběr faktur, mazání a CSV export přehledu.
 - Výpočty položek, DPH a celkové částky v CZK.
+- Množství položek až na 9 desetinných míst, včetně importu a web/PDF výstupu.
 - Detail faktury v A4 rozložení vhodném pro tisk.
 - QR platba ve formátu SPAYD.
 - Server-side PDF export faktury.
@@ -140,6 +141,75 @@ openssl rand -base64 32
 6. V nginx proxy manageru nasměrujte doménu na hostitele `app` a port `3000`.
    Obě služby musí být ve stejné síti `nginx-proxy-manager_default`.
 
+7. Pokud přístup vede pouze přes tuto důvěryhodnou proxy, nastavte ve stacku
+   `AUTH_TRUST_PROXY=true`. NPM přepisuje `X-Real-IP`, ze kterého aplikace odvodí
+   zdroj pro omezení přihlašování. Ponechte `APP_BIND=127.0.0.1` a nepovolujte
+   obcházení proxy z nedůvěryhodné sítě. Za další proxy ověřte skutečnou klientskou
+   IP v konfiguraci NPM. Při `AUTH_TRUST_PROXY=false` se hlavičkám nevěří a všechny
+   požadavky sdílejí jeden přihlašovací limit. Za stejnou IP (např. NAT) je limit
+   společný i při zapnuté důvěře; nejde o ochranu proti distribuovanému útoku.
+
+### HTTPS a bezpečnostní hlavičky
+
+V nginx proxy manageru otevřete **Hosts → Proxy Hosts → Edit → SSL**. Vyberte
+platný certifikát a zapněte **Force SSL**. Po ověření funkčního HTTPS zapněte
+**HSTS Enabled**; **HSTS Subdomains** ponechte vypnuté, pokud HTTPS nevynucujete
+také pro všechny podřízené subdomény daného hostitele. **Trust Upstream Forwarded
+Proto Headers** je potřeba pouze za další důvěryhodnou proxy, která ukončuje TLS.
+
+Aplikace sama posílá `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy` a základní CSP pro rámce, pluginy a base URL. Není třeba je znovu
+zadávat do NPM. Tento CSP profil ještě neomezuje zdroje skriptů; plná script-src
+politika vyžaduje nonce/hash pro Next.js a inicializaci tématu. HSTS patří do HTTPS
+proxy, protože aplikace nemusí vědět, zda je veřejný vstup šifrovaný.
+
+Hlavičky lze po nasazení ověřit v síťovém panelu prohlížeče na `GET /login`
+nebo příkazem `curl -I https://VAŠE_DOMÉNA/login`. U NPM nemusí `add_header`
+v hlavním poli Advanced přejít do vnořeného location, který definuje vlastní
+hlavičky; rozhodující je skutečná HTTP odpověď.
+
+### Aktualizace se zachováním databáze
+
+Aktualizujte existující stack, zachovejte jeho název i připojení volumes
+`postgres_data` a `invoice_storage`. Skutečné názvy mohou mít prefix stacku.
+Před aktualizací ověřte dostupný bod obnovy serveru včetně obou volumes.
+Neodstraňujte volumes a nepoužívejte `docker compose down -v`.
+
+App i migrátor nasazujte ze stejného vydání (SHA tagy mají tvar `:<sha>` a
+`:migrate-<sha>`). Zkontrolujte, že migrátor daného vydání skutečně proběhl a
+skončil kódem 0 před startem nové aplikace. Pouhá existence starého úspěšně
+ukončeného kontejneru není potvrzením nové migrace. PostgreSQL ponechte ve verzi 16.
+
+Bezpečnostní migrace `20261101120000_auth_sessions_and_throttle` přidává pouze
+tabulky `AuthSession` a `LoginThrottle`; existující doklady nepřepisuje.
+Předchozí přihlášení po aktualizaci přestane platit a je třeba se znovu přihlásit.
+Session jsou náhodné podepsané tokeny s otiskem uloženým v DB; odhlášení token
+odvolá i pro další klienty, kteří měli jeho kopii. Limiter rezervuje nejvýše osm
+pokusů na zdroj za pět minut atomicky v DB a počítá i úspěšné pokusy. Restart
+aplikace počítadlo nevymaže. Produkční stack má `AUTH_REQUIRED=true`, takže
+neúplná auth konfigurace nevede k nechráněnému veřejnému provozu. Lokální režim
+bez hesla zůstává podporovaný s `AUTH_REQUIRED=false`.
+
+### Omezený databázový účet aplikace
+
+Výchozí účet vytvořený pomocí `POSTGRES_USER` má administrátorská oprávnění.
+Pro omezení dopadu kompromitace vytvořte zvlášť runtime účet a nastavte
+`APP_DATABASE_URL` pouze službě aplikace; migrátor dál používá původní účet.
+Změna účtu nemění volume ani nepřenáší faktury do jiné databáze.
+
+Účet nejprve vytvořte administrátorem v existující aplikační databázi jako
+`LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`. Nastavte mu vlastní heslo mimo Git,
+například interaktivním `\password` v psql. Potřebuje `CONNECT` k této databázi,
+`USAGE` ve schématu `public`, `SELECT, INSERT, UPDATE, DELETE` nad aplikačními
+tabulkami (včetně obou auth tabulek) a potřebná oprávnění k sekvencím. Nastavte
+také `ALTER DEFAULT PRIVILEGES` pro vlastníka, pod kterým běží budoucí migrace.
+Nedávejte mu vlastnictví schématu ani právo vytvářet role nebo databáze.
+
+Než přepnete `APP_DATABASE_URL`, ověřte připojení a granty tohoto účtu do stejné
+databáze. Zvláštní znaky hesla v URL musí být percent-encoded. Při problému lze
+vrátit předchozí connection string bez změny dat. Samotná změna
+`POSTGRES_PASSWORD` v prostředí již inicializovanému účtu heslo nezmění.
+
 Aplikace publikuje port i na hostiteli, ale ve výchozím stavu jen na `127.0.0.1`
 kvůli ladění. Přímé vystavení na veřejné rozhraní zapnete přes `APP_BIND=0.0.0.0`.
 
@@ -168,6 +238,12 @@ Před uložením se vždy zobrazí náhled, rozpoznané sloupce a upozornění. 
 neuloží bez potvrzení. Import je bezpečné spustit opakovaně: faktura s již
 existujícím číslem se přeskočí, odběratel se stejným IČO se aktualizuje.
 Importované faktury si nechají původní čísla a číselná řada se podle nich posune.
+
+Nové faktury mohou mít nejvýše 500 položek na doklad a 5000 položek v jednom
+importu. Náhled při překročení limitu zobrazí vysvětlení a nepovolí potvrzení.
+Existující čísla se do limitů nepočítají; jejich obsah se nepřepisuje ani znovu
+neověřuje podle přísnějších pravidel. Server nezávisle zkontroluje všechny nové
+doklady před prvním zápisem.
 
 Rozpoznají se oddělovače `;`, `,`, tabulátor i `|`, kódování UTF-8 i Windows-1250
 a české i anglické zápisy čísel a dat.
@@ -297,10 +373,13 @@ Kompletní seznam je v `.env.example` i s komentáři. Nejdůležitější:
 | Proměnná | Význam |
 | --- | --- |
 | `DATABASE_URL` | Připojení k PostgreSQL pro Prisma. |
+| `APP_DATABASE_URL` | Volitelné připojení omezeného účtu produkční aplikace; migrátor zůstává oddělený. |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Údaje databáze v compose. |
 | `AUTH_PASSWORD` | Heslo do aplikace. Prázdné = běh bez přihlášení a varovný pruh. |
 | `AUTH_SECRET` | Náhodný klíč pro podpis session cookie. |
 | `AUTH_SESSION_HOURS` | Platnost přihlášení, výchozí 720 hodin. |
+| `AUTH_TRUST_PROXY` | Důvěřovat `X-Real-IP` pouze od důvěryhodné proxy; výchozí false. |
+| `AUTH_REQUIRED` | Při true odmítnout přístup bez hesla a secretu; produkční compose jej vynucuje. |
 | `NEXT_PUBLIC_APP_URL` | Veřejná URL aplikace. |
 | `APP_PORT`, `APP_BIND` | Port a rozhraní publikované na hostiteli. |
 
@@ -334,6 +413,36 @@ takže o lokální data nepřijdeš.
 npm run db
 npm run test:integration
 ```
+
+### Testy v prohlížeči (E2E)
+
+Malá sada Playwright testů běží proti produkčnímu buildu v Chromium. Ověřuje
+přihlášení a ochranu dat, vystavení a editaci faktury, shodu náhledu s uložením,
+vyšší přesnost množství, částečnou úhradu a doplacení, skutečný QR na webu
+i ve vyrenderovaném PDF a import s náhledem, potvrzením a opakováním.
+
+Potřebuje Chromium a Poppler (`pdftotext`, `pdftoppm`). Na macOS nainstalujte
+Poppler přes `brew install poppler`; na Ubuntu přes `apt-get install poppler-utils`.
+
+```bash
+npx playwright install chromium
+npm run build
+DATABASE_URL=postgresql://fakturka:test-only@127.0.0.1:5432/fakturka npm run test:e2e
+```
+
+Použijte **jednorázový lokální PostgreSQL**, nikdy produkční připojení. Příklad
+URL nahraďte syntetickými údaji své testovací instance. Runner záměrně nečte
+`.env`, vyžaduje explicitní `DATABASE_URL`, vytvoří databázi s unikátním názvem,
+aplikuje migrace a po běhu ji odstraní. Používá vlastní testovací heslo,
+produkční server na `127.0.0.1:3100` (volitelně `E2E_PORT`) a jeden worker.
+Existující server nepřebírá. Výsledky při selhání jsou v `test-results/`.
+CI používá Node 24 a PostgreSQL 16; E2E je součástí kontroly před publikací image.
+
+Množství se ukládá jako `Decimal(18,9)` bez převodu přes JavaScriptové číslo;
+hodnoty nad 9 desetinných míst nebo mimo kladný rozsah pod 1 miliardu se
+odmítnou. Ceny a výsledky zůstávají v haléřích: nejprve se zaokrouhlí základ
+každé položky, poté její DPH a nakonec se sečtou položky. Rozšíření přesnosti
+nepřepočítává historické doklady a nedokáže obnovit dříve oříznuté číslice.
 
 ## Stav projektu
 

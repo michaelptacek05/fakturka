@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import Image from "next/image";
 import { notFound } from "next/navigation";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { InvoiceAssetType, VatPayerStatus } from "@/generated/prisma/enums";
 import { formatCurrency, formatDate, numberFormatter } from "@/lib/format";
+import { formatQuantity } from "@/lib/invoice-calculations";
 import {
   fromCents,
   getInvoiceVisualState,
@@ -92,6 +94,7 @@ export default async function InvoiceDetailPage({
   params,
   searchParams,
 }: InvoiceDetailPageProps) {
+  await requireSession();
   const { id } = await params;
   const invoice = await getInvoice(id);
   const query = await searchParams;
@@ -155,7 +158,7 @@ export default async function InvoiceDetailPage({
           <p className="text-sm text-muted-foreground">
             {clientName} · splatnost {formatDate(invoice.dueDate)}
             {summary.isPartiallyPaid
-              ? ` · zbývá ${formatCurrency(remaining)}`
+              ? ` · zbývá ${formatCurrency(remaining, invoice.currency)}`
               : ""}
             {invoice.paidAt ? ` · uhrazeno ${formatDate(invoice.paidAt)}` : ""}
           </p>
@@ -196,6 +199,7 @@ export default async function InvoiceDetailPage({
       ) : null}
 
       <InvoicePaymentsCard
+        currency={invoice.currency}
         invoiceId={invoice.id}
         paidAmount={invoice.paidAmount}
         payments={invoice.payments}
@@ -351,10 +355,10 @@ export default async function InvoiceDetailPage({
                   >
                     <td className="py-3 pr-3">{item.name}</td>
                     <td className="px-3 py-3 text-right">
-                      {numberFormatter.format(Number(item.quantity))} {item.unit}
+                      {formatQuantity(item.quantity)} {item.unit}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      {formatCurrency(item.unitPrice)}
+                      {formatCurrency(item.unitPrice, invoice.currency)}
                     </td>
                     {isVatPayer ? (
                       <td className="px-3 py-3 text-right">
@@ -362,7 +366,7 @@ export default async function InvoiceDetailPage({
                       </td>
                     ) : null}
                     <td className="py-3 pl-3 text-right font-medium">
-                      {formatCurrency(item.lineTotal)}
+                      {formatCurrency(item.lineTotal, invoice.currency)}
                     </td>
                   </tr>
                 ))}
@@ -388,7 +392,7 @@ export default async function InvoiceDetailPage({
             ) : null}
             <p>Variabilní symbol: {invoice.variableSymbol}</p>
             {/* QR platí vždy na doplatek — u uhrazené faktury nemá co načítat. */}
-            {summary.remainingCents > 0 ? (
+            {invoice.currency === "CZK" && summary.remainingCents > 0 ? (
               <PaymentQr
                 accountNumber={invoice.profile.accountNumber}
                 amount={remaining}
@@ -446,29 +450,29 @@ export default async function InvoiceDetailPage({
               <>
                 <div className="flex justify-between">
                   <span>Mezisoučet</span>
-                  <strong>{formatCurrency(invoice.subtotal)}</strong>
+                  <strong>{formatCurrency(invoice.subtotal, invoice.currency)}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>DPH</span>
-                  <strong>{formatCurrency(invoice.vatTotal)}</strong>
+                  <strong>{formatCurrency(invoice.vatTotal, invoice.currency)}</strong>
                 </div>
               </>
             ) : null}
             <div className="mt-2 flex justify-between border-t-2 border-zinc-950 pt-3 text-lg">
               <span>Celkem k úhradě</span>
-              <strong>{formatCurrency(invoice.total)}</strong>
+              <strong>{formatCurrency(invoice.total, invoice.currency)}</strong>
             </div>
             {summary.isPartiallyPaid ? (
               <>
                 <div className="flex justify-between text-zinc-600">
                   <span>Uhrazeno</span>
                   <strong className="font-medium">
-                    {formatCurrency(fromCents(summary.paidCents))}
+                    {formatCurrency(fromCents(summary.paidCents), invoice.currency)}
                   </strong>
                 </div>
                 <div className="flex justify-between border-t border-zinc-300 pt-2 font-semibold">
                   <span>Zbývá k úhradě</span>
-                  <strong>{formatCurrency(remaining)}</strong>
+                  <strong>{formatCurrency(remaining, invoice.currency)}</strong>
                 </div>
               </>
             ) : null}

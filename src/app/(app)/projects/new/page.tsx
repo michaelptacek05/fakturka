@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -26,6 +27,7 @@ export default async function NewProjectPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const clients = await getClients();
   const errorMessage =

@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/auth-session";
 import Link from "next/link";
 import { FilePlus2, Search } from "lucide-react";
 
@@ -93,6 +94,7 @@ export default async function InvoicesPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const queryParam = typeof params?.q === "string" ? params.q.trim() : "";
   const statusParam = typeof params?.status === "string" ? params.status : "";
@@ -227,13 +229,13 @@ export default async function InvoicesPage({
               issueDate: formatDate(invoice.issueDate),
               number: invoice.number,
               remaining: summary.isPartiallyPaid
-                ? formatCurrency(fromCents(summary.remainingCents))
+                ? formatCurrency(fromCents(summary.remainingCents), invoice.currency)
                 : undefined,
               statusLabel:
                 visualStateLabels[visualState] ??
                 statusLabels[invoice.status] ??
                 invoice.status,
-              total: formatCurrency(invoice.total),
+              total: formatCurrency(invoice.total, invoice.currency),
               visualState,
             };
           })}

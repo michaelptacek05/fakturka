@@ -10,6 +10,7 @@ const today = new Date(2026, 5, 15);
 type Payment = { amount: number | string; paidOn: Date };
 
 type InvoiceOverrides = {
+  currency?: string;
   dueDate?: Date;
   id?: string;
   issueDate?: Date;
@@ -29,6 +30,7 @@ function createInvoice(overrides: InvoiceOverrides = {}) {
   const payments = overrides.payments ?? [];
 
   return {
+    currency: overrides.currency ?? "CZK",
     clientName: "Odběratel s.r.o.",
     dueDate: overrides.dueDate ?? new Date(2026, 6, 15),
     id: overrides.id ?? "invoice-1",
@@ -267,5 +269,15 @@ describe("obrat a odvody", () => {
 
     expect(dashboard.metrics.year.total).toBe(120_000);
     expect(dashboard.estimate.revenue).toBe(120_000);
+  });
+});
+
+describe("měny dashboardu", () => {
+  it("cizí měny nevstupují do příjmů, zůstatků, obratu ani odhadu daní", () => {
+    const czk = createInvoice({ total: 100, payments: [{ amount: 100, paidOn: today }], status: InvoiceStatus.PAID });
+    const eurPaid = createInvoice({ currency: "EUR", total: 900, payments: [{ amount: 900, paidOn: today }], status: InvoiceStatus.PAID });
+    const eurUnpaid = createInvoice({ currency: "EUR", total: 123 });
+    const expected = buildDashboardData([czk], today);
+    expect(buildDashboardData([czk, eurPaid, eurUnpaid], today)).toEqual(expected);
   });
 });
