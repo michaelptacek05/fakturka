@@ -10,6 +10,9 @@ updates:
       # Odebrat po ověření kompatibility; starší podporované řady se aktualizují dál.
       - dependency-name: typescript
         versions: ["7.x"]
+      # Hlavní verzi typů zvedat spolu s Node.js v Dockerfile a CI.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       next-react:
         patterns:
